@@ -453,6 +453,7 @@ class orderController {
 
             const recentOrders = await customerOrder
                 .find({ customerId: new ObjectId(userId) })
+                .sort({ createdAt: -1 })
                 .limit(5)
 
             const pendingOrder = await customerOrder.countDocuments({
@@ -496,11 +497,11 @@ class orderController {
                 orders = await customerOrder.find({
                     customerId: new ObjectId(customerId),
                     delivery_status: status
-                })
+                }).sort({ createdAt: -1 })
             } else {
                 orders = await customerOrder.find({
                     customerId: new ObjectId(customerId)
-                })
+                }).sort({ createdAt: -1 })
             }
 
             responseReturn(res, 200, { orders })
