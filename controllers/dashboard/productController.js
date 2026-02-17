@@ -3,6 +3,8 @@ const cloudinary = require('cloudinary').v2
 const productModel = require('../../models/productModel');
 const sellerModel = require('../../models/sellerModel')
 const { responseReturn } = require('../../utiles/response');
+const authOrderModel = require('../../models/authOrder');
+
 class productController {
 
     add_product = async (req, res) => {
@@ -228,10 +230,12 @@ class productController {
     }
 
     admin_products_get = async (req, res) => {
+
         const { page, searchValue, parPage } = req.query;
         const skipPage = parseInt(parPage) * (parseInt(page) - 1);
 
         try {
+
             let query = {};
 
             if (searchValue) {
@@ -247,25 +251,67 @@ class productController {
                     { category: { $regex: searchValue, $options: "i" } },
                     { brand: { $regex: searchValue, $options: "i" } },
                     { description: { $regex: searchValue, $options: "i" } },
-                    { sellerId: { $in: sellerIds } } // 🔥 seller search
+                    { sellerId: { $in: sellerIds } }
                 ];
             }
 
             const products = await productModel
                 .find(query)
-                .populate('sellerId', 'name email')
+                .populate('sellerId', 'name email shopInfo')
                 .skip(skipPage)
                 .limit(parseInt(parPage))
                 .sort({ createdAt: -1 });
 
             const totalProduct = await productModel.countDocuments(query);
 
-            responseReturn(res, 200, { totalProduct, products });
+            /* 🔥 ADD SELLER ORDER STATS */
+
+            const productsWithStats = await Promise.all(
+                products.map(async (product) => {
+
+                    const sellerId = product.sellerId._id;
+
+                    const totalOrders = await authOrderModel.countDocuments({
+                        sellerId
+                    });
+
+                    const pendingOrders = await authOrderModel.countDocuments({
+                        sellerId,
+                        delivery_status: 'pending'
+                    });
+
+                    const deliveredOrders = await authOrderModel.countDocuments({
+                        sellerId,
+                        delivery_status: 'delivered'
+                    });
+
+                    const cancelledOrders = await authOrderModel.countDocuments({
+                        sellerId,
+                        delivery_status: 'cancelled'
+                    });
+
+                    return {
+                        ...product.toObject(),
+                        sellerProgress: {
+                            totalOrders,
+                            pendingOrders,
+                            deliveredOrders,
+                            cancelledOrders
+                        }
+                    };
+                })
+            );
+
+            responseReturn(res, 200, {
+                totalProduct,
+                products: productsWithStats
+            });
 
         } catch (error) {
             responseReturn(res, 500, { error: error.message });
         }
     };
+
 
     product_full_details = async (req, res) => {
         const { productId } = req.params;

@@ -7,6 +7,8 @@ const cloudinary = require('cloudinary').v2
 const { responseReturn } = require('../utiles/response')
 const { createToken } = require('../utiles/tokenCreate')
 
+const sendMail = require('../utiles/mailer')
+const welcomeTemplate = require('../utiles/Template/welcome')
 
 
 
@@ -42,58 +44,122 @@ class authControllers {
     }
 
     seller_login = async (req, res) => {
-        const { email, password } = req.body
+
+        const { credential, password } = req.body
+        // credential = email OR mobile
+
         try {
-            const seller = await sellerModel.findOne({ email }).select('+password')
-            if (seller) {
-                const match = await bcrpty.compare(password, seller.password)
-                if (match) {
-                    const token = await createToken({
-                        id: seller.id,
-                        role: seller.role
-                    })
-                    res.cookie('accessToken', token, {
-                        expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-                    })
-                    responseReturn(res, 200, { token, message: 'Login success' })
-                } else {
-                    responseReturn(res, 404, { error: "Password wrong" })
-                }
-            } else {
-                responseReturn(res, 404, { error: "Email not found" })
+
+            if (!credential || !password) {
+                return responseReturn(res, 400, { error: "All fields are required" })
             }
+
+            // Detect if input is mobile (starts with + and digits)
+            const isMobile = /^\+[1-9]\d{7,14}$/.test(credential)
+
+            // Build dynamic query
+            const query = isMobile
+                ? { mobile: credential }
+                : { email: credential.toLowerCase() }
+
+            const seller = await sellerModel
+                .findOne(query)
+                .select('+password')
+
+            if (!seller) {
+                return responseReturn(res, 404, { error: "Invalid email or mobile" })
+            }
+
+            const match = await bcrpty.compare(password, seller.password)
+
+            if (!match) {
+                return responseReturn(res, 400, { error: "Invalid password" })
+            }
+
+            const token = await createToken({
+                id: seller.id,
+                role: seller.role
+            })
+
+            res.cookie('accessToken', token, {
+                expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict'
+            })
+
+            return responseReturn(res, 200, {
+                token,
+                message: 'Login success'
+            })
+
         } catch (error) {
-            responseReturn(res, 500, { error: error.message })
+            console.log(error)
+            return responseReturn(res, 500, { error: error.message })
         }
     }
 
     seller_register = async (req, res) => {
-        const { email, name, password } = req.body
+        const { email, name, password, mobile } = req.body
+
         try {
-            const getUser = await sellerModel.findOne({ email })
-            if (getUser) {
-                responseReturn(res, 404, { error: 'Email alrady exit' })
-            } else {
-                const seller = await sellerModel.create({
-                    name,
-                    email,
-                    password: await bcrpty.hash(password, 10),
-                    method: 'menualy',
-                    shopInfo: {}
-                })
-                await sellerCustomerModel.create({
-                    myId: seller.id
-                })
-                const token = await createToken({ id: seller.id, role: seller.role })
-                res.cookie('accessToken', token, {
-                    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-                })
-                responseReturn(res, 201, { token, message: 'register success' })
+
+            if (!email || !name || !password || !mobile) {
+                return responseReturn(res, 400, { error: 'All fields are required' })
             }
+
+
+            const mobileRegex = /^\+[1-9]\d{7,14}$/
+            if (!mobileRegex.test(mobile)) {
+                return responseReturn(res, 400, { error: 'Invalid mobile number format. Use country code like +919876543210' })
+            }
+
+
+            const emailExist = await sellerModel.findOne({ email })
+            if (emailExist) {
+                return responseReturn(res, 409, { error: 'Email already exists' })
+            }
+
+
+            const mobileExist = await sellerModel.findOne({ mobile })
+            if (mobileExist) {
+                return responseReturn(res, 409, { error: 'Mobile number already exists' })
+            }
+
+
+            const seller = await sellerModel.create({
+                name,
+                email,
+                mobile,
+                password: await bcrpty.hash(password, 10),
+                method: 'manually',
+                shopInfo: {}
+            })
+
+            await sellerCustomerModel.create({
+                myId: seller.id
+            })
+
+            const token = await createToken({ id: seller.id, role: seller.role })
+
+            res.cookie('accessToken', token, {
+                expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                httpOnly: true
+            })
+            await sendMail({
+                to: email,
+                subject: "Welcome to Ecommerce",
+                html: welcomeTemplate(name)
+            })
+
+            return responseReturn(res, 201, { token, message: 'Register success' })
+
         } catch (error) {
-            responseReturn(res, 500, { error: 'Internal server error' })
+            console.log(error)
+            return responseReturn(res, 500, { error: error.message })
         }
     }
+
 
     getUser = async (req, res) => {
         const { id, role } = req;
@@ -162,11 +228,11 @@ class authControllers {
 
     logout = async (req, res) => {
         try {
-            res.cookie('accessToken',null,{
-                expires : new Date(Date.now()),
-                httpOnly : true
+            res.cookie('accessToken', null, {
+                expires: new Date(Date.now()),
+                httpOnly: true
             })
-            responseReturn(res,200,{message : 'logout success'})
+            responseReturn(res, 200, { message: 'logout success' })
         } catch (error) {
             responseReturn(res, 500, { error: error.message })
         }

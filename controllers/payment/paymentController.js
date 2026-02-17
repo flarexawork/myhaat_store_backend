@@ -29,9 +29,10 @@ class paymentController {
                 return responseReturn(res, 404, { message: 'Seller not found' })
             }
 
+            // 1️⃣ Create Razorpay Route Account
             const account = await razorpay.accounts.create({
                 email: seller.email,
-                phone: seller.phone || "9999999999",
+                phone: seller.mobile || "9999999999", // FIXED
                 type: "route",
                 legal_business_name: seller.shopInfo?.shopName || seller.name,
                 business_type: "individual",
@@ -39,20 +40,30 @@ class paymentController {
                 profile: { category: "ecommerce" }
             })
 
+            // 2️⃣ Store Account ID
             await paymentAccountModel.findOneAndUpdate(
                 { sellerId: id },
                 { razorpayAccountId: account.id },
-                { upsert: true }
+                { upsert: true, new: true }
             )
 
+            // 3️⃣ Create Onboarding Link (VERY IMPORTANT)
+            const accountLink = await razorpay.accountLinks.create({
+                account: account.id,
+                refresh_url: "http://localhost:3001/reauth",
+                return_url: "http://localhost:3001/payment-success",
+                type: "account_onboarding"
+            })
+
+            // 4️⃣ Return URL to Frontend
             responseReturn(res, 200, {
                 message: "Razorpay account created",
-                accountId: account.id
+                url: accountLink.short_url
             })
 
         } catch (error) {
-            console.log(error)
-            responseReturn(res, 500, { message: 'Account creation failed' })
+            console.log("RAZORPAY ERROR:", error)
+            responseReturn(res, 500, { message: error.message })
         }
     }
 
