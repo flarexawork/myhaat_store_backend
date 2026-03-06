@@ -3,6 +3,13 @@ const customerOrder = require('../../models/customerOrder')
 const cardModel = require('../../models/cardModel')
 const myShopWallet = require('../../models/myShopWallet')
 const sellerWallet = require('../../models/sellerWallet')
+const orderStatusService = require('../../services/order/orderStatusService')
+const {
+    normalizeDeliveryStatus,
+    normalizeOrderStatus,
+    isValidDeliveryStatus,
+    isValidOrderStatus
+} = require('../../validations/orderStatusValidation')
 
 const { mongo: { ObjectId } } = require('mongoose')
 const { responseReturn } = require('../../utiles/response')
@@ -16,6 +23,34 @@ const razorpay = new Razorpay({
 })
 
 class orderController {
+    sync_customer_order_state = async (parentOrderId) => {
+        const subOrders = await authOrderModel.find({
+            orderId: new ObjectId(parentOrderId)
+        }).select('order_status delivery_status')
+
+        if (!subOrders.length) {
+            return
+        }
+
+        const aggregatedDeliveryStatus = orderStatusService.getDeliveryStatusAggregation(
+            subOrders.map((item) => item.delivery_status)
+        )
+
+        const aggregatedOrderStatus = orderStatusService.getOrderStatusAggregation(
+            subOrders.map((item) => item.order_status)
+        )
+
+        const updateData = {
+            delivery_status: aggregatedDeliveryStatus
+        }
+
+        if (aggregatedOrderStatus) {
+            updateData.order_status = aggregatedOrderStatus
+        }
+
+        await customerOrder.findByIdAndUpdate(parentOrderId, updateData)
+    }
+
 
     /* ================================================= */
     /* AUTO CANCEL ONLINE UNPAID (15 MIN)               */
@@ -101,7 +136,8 @@ class orderController {
                 price: price + shipping_fee,
                 payment_type,
                 payment_status: payment_type === 'cod' ? 'cod' : 'pending',
-                delivery_status: 'pending',
+                delivery_status: 'PENDING',
+                order_status: 'PENDING',
                 date: tempDate
             })
 
@@ -130,7 +166,8 @@ class orderController {
                     payment_type,
                     payment_status: payment_type === 'cod' ? 'cod' : 'pending',
                     shippingInfo: { ...shippingInfo },
-                    delivery_status: 'pending',
+                    delivery_status: 'PENDING',
+                    order_status: 'PENDING',
                     date: tempDate
                 })
             }
@@ -458,7 +495,7 @@ class orderController {
 
             const pendingOrder = await customerOrder.countDocuments({
                 customerId: new ObjectId(userId),
-                delivery_status: 'pending'
+                delivery_status: { $in: ['PENDING', 'pending'] }
             })
 
             const cancelledOrder = await customerOrder.countDocuments({
@@ -494,9 +531,12 @@ class orderController {
             let orders
 
             if (status !== 'all') {
+                const normalizedStatus = normalizeDeliveryStatus(status)
+                const statusFilter = [status, normalizedStatus].filter(Boolean)
+
                 orders = await customerOrder.find({
                     customerId: new ObjectId(customerId),
-                    delivery_status: status
+                    delivery_status: { $in: statusFilter }
                 }).sort({ createdAt: -1 })
             } else {
                 orders = await customerOrder.find({
@@ -516,10 +556,77 @@ class orderController {
         const { orderId } = req.params
 
         try {
+            if (!orderId || !ObjectId.isValid(orderId)) {
+                return responseReturn(res, 400, { message: 'Valid orderId required' })
+            }
             const order = await customerOrder.findById(orderId)
             responseReturn(res, 200, { order })
         } catch (error) {
             console.log(error)
+        }
+    }
+
+    customer_order_cancel = async (req, res) => {
+        const { orderId } = req.params
+        const customerId = req.id || req.body?.customerId || req.body?.userId
+
+        try {
+            if (!orderId || !ObjectId.isValid(orderId)) {
+                return responseReturn(res, 400, { message: 'Valid orderId required' })
+            }
+
+            if (!customerId || !ObjectId.isValid(customerId)) {
+                return responseReturn(res, 400, { message: 'Valid customerId required' })
+            }
+
+            const order = await customerOrder.findById(orderId)
+
+            if (!order) {
+                return responseReturn(res, 404, { message: 'Order not found' })
+            }
+
+            if (String(order.customerId) !== String(customerId)) {
+                return responseReturn(res, 401, { message: 'unauthorized' })
+            }
+
+            if (order.delivery_status === 'cancelled') {
+                return responseReturn(res, 400, { message: 'Order already cancelled' })
+            }
+
+            if (normalizeOrderStatus(order.order_status) === 'REJECT') {
+                return responseReturn(res, 400, { message: 'Order already rejected' })
+            }
+
+            if (normalizeOrderStatus(order.order_status) === 'ACCEPT') {
+                return responseReturn(res, 400, { message: 'Order already accepted, cannot cancel' })
+            }
+
+            const acceptedSubOrder = await authOrderModel.findOne({
+                orderId: new ObjectId(orderId),
+                order_status: 'ACCEPT'
+            })
+
+            if (acceptedSubOrder) {
+                return responseReturn(res, 400, { message: 'Order already accepted, cannot cancel' })
+            }
+
+            await customerOrder.findByIdAndUpdate(orderId, {
+                order_status: 'REJECT',
+                delivery_status: 'cancelled'
+            })
+
+            await authOrderModel.updateMany(
+                { orderId: new ObjectId(orderId) },
+                {
+                    order_status: 'REJECT',
+                    delivery_status: 'cancelled'
+                }
+            )
+
+            responseReturn(res, 200, { message: 'Order cancelled successfully' })
+        } catch (error) {
+            console.log(error)
+            responseReturn(res, 500, { message: 'Internal server error' })
         }
     }
 
@@ -529,14 +636,41 @@ class orderController {
     get_admin_orders = async (req, res) => {
 
         let { page, parPage } = req.query
+        const searchValue = String(req.query?.searchValue || '').trim()
         page = parseInt(page)
         parPage = parseInt(parPage)
+
+        if (Number.isNaN(page) || page < 1) page = 1
+        if (Number.isNaN(parPage) || parPage < 1) parPage = 5
 
         const skipPage = parPage * (page - 1)
 
         try {
+            const matchStage = {}
 
-            const orders = await customerOrder.aggregate([
+            if (searchValue) {
+                const searchRegex = new RegExp(searchValue, 'i')
+                const searchConditions = [
+                    { payment_status: searchRegex },
+                    { delivery_status: searchRegex },
+                    { order_status: searchRegex },
+                    { date: searchRegex }
+                ]
+
+                if (ObjectId.isValid(searchValue)) {
+                    searchConditions.unshift({ _id: new ObjectId(searchValue) })
+                }
+
+                matchStage.$or = searchConditions
+            }
+
+            const pipeline = []
+
+            if (Object.keys(matchStage).length) {
+                pipeline.push({ $match: matchStage })
+            }
+
+            pipeline.push(
                 {
                     $lookup: {
                         from: 'authororders',
@@ -544,13 +678,17 @@ class orderController {
                         foreignField: 'orderId',
                         as: 'suborder'
                     }
-                }
-            ])
-                .skip(skipPage)
-                .limit(parPage)
-                .sort({ createdAt: -1 })
+                },
+                { $sort: { createdAt: -1 } },
+                { $skip: skipPage },
+                { $limit: parPage }
+            )
 
-            const totalOrder = await customerOrder.countDocuments()
+            const orders = await customerOrder.aggregate(pipeline)
+
+            const totalOrder = Object.keys(matchStage).length
+                ? await customerOrder.countDocuments(matchStage)
+                : await customerOrder.countDocuments()
 
             responseReturn(res, 200, { orders, totalOrder })
 
@@ -564,6 +702,9 @@ class orderController {
         const { orderId } = req.params
 
         try {
+            if (!orderId || !ObjectId.isValid(orderId)) {
+                return responseReturn(res, 400, { message: 'Valid orderId required' })
+            }
 
             const order = await customerOrder.aggregate([
                 { $match: { _id: new ObjectId(orderId) } },
@@ -590,20 +731,81 @@ class orderController {
     admin_order_status_update = async (req, res) => {
 
         const { orderId } = req.params
-        const { status } = req.body
+        const incomingDeliveryStatus =
+            req.body?.delivery_status ||
+            req.body?.deliveryStatus ||
+            req.body?.status
+        const incomingOrderStatus =
+            req.body?.order_status ||
+            req.body?.orderStatus
 
         try {
+            if (req.role !== 'admin') {
+                return responseReturn(res, 401, {
+                    success: false,
+                    message: 'unauthorized'
+                })
+            }
 
-            await customerOrder.findByIdAndUpdate(orderId, {
-                delivery_status: status
-            })
+            if (!orderId || !ObjectId.isValid(orderId)) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'Invalid status transition'
+                })
+            }
 
+            const targetOrder = await customerOrder.findById(orderId)
+
+            if (!targetOrder) {
+                return responseReturn(res, 404, {
+                    success: false,
+                    message: 'Order not found'
+                })
+            }
+
+            if (!incomingDeliveryStatus && !incomingOrderStatus) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'Invalid status transition'
+                })
+            }
+
+            const updateData = {}
+
+            if (incomingOrderStatus) {
+                const normalizedOrderStatus = normalizeOrderStatus(incomingOrderStatus)
+                if (!isValidOrderStatus(normalizedOrderStatus) && normalizedOrderStatus !== 'PENDING') {
+                    return responseReturn(res, 400, {
+                        success: false,
+                        message: 'Invalid status transition'
+                    })
+                }
+                updateData.order_status = normalizedOrderStatus
+            }
+
+            if (incomingDeliveryStatus) {
+                const normalizedDeliveryStatus = normalizeDeliveryStatus(incomingDeliveryStatus)
+                if (!isValidDeliveryStatus(normalizedDeliveryStatus)) {
+                    return responseReturn(res, 400, {
+                        success: false,
+                        message: 'Invalid status transition'
+                    })
+                }
+                updateData.delivery_status = normalizedDeliveryStatus
+            }
+
+            await customerOrder.findByIdAndUpdate(orderId, updateData)
             await authOrderModel.updateMany(
                 { orderId: new ObjectId(orderId) },
-                { delivery_status: status }
+                updateData
             )
 
-            if (status === 'delivered') {
+            const wasDeliveredBefore =
+                normalizeDeliveryStatus(targetOrder.delivery_status) === 'DELIVERED'
+            const becameDeliveredNow =
+                updateData.delivery_status === 'DELIVERED'
+
+            if (becameDeliveredNow && !wasDeliveredBefore) {
 
                 const sellerOrders = await authOrderModel.find({
                     orderId: new ObjectId(orderId),
@@ -639,11 +841,17 @@ class orderController {
                 }
             }
 
-            responseReturn(res, 200, { message: 'Order status updated' })
+            responseReturn(res, 200, {
+                success: true,
+                message: 'Status updated successfully'
+            })
 
         } catch (error) {
             console.log(error)
-            responseReturn(res, 500, { message: 'Internal server error' })
+            responseReturn(res, 500, {
+                success: false,
+                message: 'Internal server error'
+            })
         }
     }
 
@@ -681,6 +889,9 @@ class orderController {
         const { orderId } = req.params
 
         try {
+            if (!orderId || !ObjectId.isValid(orderId)) {
+                return responseReturn(res, 400, { message: 'Valid orderId required' })
+            }
             const order = await authOrderModel.findById(orderId)
             responseReturn(res, 200, { order })
         } catch (error) {
@@ -691,18 +902,156 @@ class orderController {
     seller_order_status_update = async (req, res) => {
 
         const { orderId } = req.params
-        const { status } = req.body
+        const incomingStatus = req.body?.status || req.body?.order_status
 
         try {
+            const roleValidation = orderStatusService.ensureRole(req.role)
 
-            await authOrderModel.findByIdAndUpdate(orderId, {
-                delivery_status: status
+            if (!roleValidation.success) {
+                return responseReturn(res, roleValidation.code, {
+                    success: false,
+                    message: roleValidation.message
+                })
+            }
+
+            if (!orderId || !ObjectId.isValid(orderId)) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'Invalid status transition'
+                })
+            }
+
+            const sellerOrder = await authOrderModel.findById(orderId)
+
+            if (!sellerOrder) {
+                return responseReturn(res, 404, {
+                    success: false,
+                    message: 'Order not found'
+                })
+            }
+
+            const canAccess = orderStatusService.isOwnerOrAdmin(
+                req.role,
+                req.id,
+                sellerOrder.sellerId
+            )
+
+            if (!canAccess) {
+                return responseReturn(res, 401, {
+                    success: false,
+                    message: 'unauthorized'
+                })
+            }
+
+            const orderValidation = orderStatusService.validateOrderStatusUpdate(
+                sellerOrder.order_status,
+                incomingStatus
+            )
+
+            if (!orderValidation.success) {
+                return responseReturn(res, orderValidation.code, {
+                    success: false,
+                    message: orderValidation.message
+                })
+            }
+
+            const orderUpdateData = {
+                order_status: orderValidation.data.order_status
+            }
+
+            if (orderValidation.data.order_status === 'REJECT') {
+                orderUpdateData.delivery_status = 'cancelled'
+            }
+
+            await authOrderModel.findByIdAndUpdate(orderId, orderUpdateData)
+
+            await this.sync_customer_order_state(sellerOrder.orderId)
+
+            responseReturn(res, 200, {
+                success: true,
+                message: 'Status updated successfully'
             })
 
-            responseReturn(res, 200, { message: 'Seller order updated' })
+        } catch (error) {
+            responseReturn(res, 500, {
+                success: false,
+                message: 'Internal server error'
+            })
+        }
+    }
+
+    seller_delivery_status_update = async (req, res) => {
+        const { orderId } = req.params
+        const incomingStatus = req.body?.status || req.body?.delivery_status
+
+        try {
+            const roleValidation = orderStatusService.ensureRole(req.role)
+
+            if (!roleValidation.success) {
+                return responseReturn(res, roleValidation.code, {
+                    success: false,
+                    message: roleValidation.message
+                })
+            }
+
+            if (!orderId || !ObjectId.isValid(orderId)) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'Invalid status transition'
+                })
+            }
+
+            const sellerOrder = await authOrderModel.findById(orderId)
+
+            if (!sellerOrder) {
+                return responseReturn(res, 404, {
+                    success: false,
+                    message: 'Order not found'
+                })
+            }
+
+            const canAccess = orderStatusService.isOwnerOrAdmin(
+                req.role,
+                req.id,
+                sellerOrder.sellerId
+            )
+
+            if (!canAccess) {
+                return responseReturn(res, 401, {
+                    success: false,
+                    message: 'unauthorized'
+                })
+            }
+
+            const deliveryValidation = orderStatusService.validateDeliveryStatusUpdate(
+                sellerOrder.delivery_status,
+                incomingStatus,
+                sellerOrder.order_status
+            )
+
+            if (!deliveryValidation.success) {
+                return responseReturn(res, deliveryValidation.code, {
+                    success: false,
+                    message: deliveryValidation.message
+                })
+            }
+
+            await authOrderModel.findByIdAndUpdate(orderId, {
+                delivery_status: deliveryValidation.data.delivery_status
+            })
+
+            await this.sync_customer_order_state(sellerOrder.orderId)
+
+            responseReturn(res, 200, {
+                success: true,
+                message: 'Status updated successfully'
+            })
 
         } catch (error) {
-            responseReturn(res, 500, { message: 'Internal server error' })
+            responseReturn(res, 500, {
+                success: false,
+                message: 'Internal server error'
+            })
         }
     }
 

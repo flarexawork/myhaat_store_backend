@@ -47,7 +47,7 @@ module.exports.get_seller_dashboard_data = async (req, res) => {
                 },
                 {
                     delivery_status: {
-                        $eq: 'pending'
+                        $in: ['PENDING', 'pending']
                     }
                 }
             ]
@@ -70,7 +70,9 @@ module.exports.get_seller_dashboard_data = async (req, res) => {
 
         const recentOrders = await authorOrder.find({
             sellerId: new ObjectId(id)
-        }).limit(5)
+        })
+            .sort({ createdAt: -1 })
+            .limit(5)
 
         responseReturn(res, 200, {
             totalOrder,
@@ -106,7 +108,9 @@ module.exports.get_admin_dashboard_data = async (req, res) => {
 
         const messages = await adminSellerMessage.find({}).limit(3)
 
-        const recentOrders = await customerOrder.find({}).limit(5)
+        const recentOrders = await customerOrder.find({})
+            .sort({ createdAt: -1 })
+            .limit(5)
 
         responseReturn(res, 200, {
             totalOrder,

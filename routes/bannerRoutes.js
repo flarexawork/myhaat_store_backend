@@ -4,6 +4,8 @@ const { authMiddleware } = require('../middlewares/authMiddleware')
 router.post('/banner/add', authMiddleware, bannerController.add_banner)
 router.get('/banner/get/:productId', authMiddleware, bannerController.get_banner)
 router.put('/banner/update/:bannerId', authMiddleware, bannerController.update_banner)
+router.get('/banner/admin/list', authMiddleware, bannerController.get_admin_banners)
+router.delete('/banner/delete/:bannerId', authMiddleware, bannerController.delete_banner)
 router.get('/banners', bannerController.get_banners)
 
 module.exports = router

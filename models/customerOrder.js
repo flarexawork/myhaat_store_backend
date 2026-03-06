@@ -48,8 +48,30 @@ const customerOrderSchema = new Schema({
 
     delivery_status: {
         type: String,
-        enum: ['pending', 'shipped', 'delivered', 'cancelled'],
-        default: 'pending'
+        enum: [
+            'PENDING',
+            'PROCESSING',
+            'PACKED',
+            'SHIPPED',
+            'OUT_FOR_DELIVERY',
+            'DELIVERED',
+            'DELIVERY_REJECTED',
+            'pending',
+            'processing',
+            'packed',
+            'shipped',
+            'out_for_delivery',
+            'delivered',
+            'delivery_rejected',
+            'cancelled'
+        ],
+        default: 'PENDING'
+    },
+
+    order_status: {
+        type: String,
+        enum: ['PENDING', 'ACCEPT', 'REJECT'],
+        default: 'PENDING'
     },
 
 

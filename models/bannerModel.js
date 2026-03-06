@@ -3,7 +3,7 @@ const { Schema, model } = require('mongoose')
 const bannerSchema = new Schema({
     productId: {
         type: Schema.ObjectId,
-        required: true,
+        default: null
     },
     banner: {
         type: String,
@@ -11,7 +11,7 @@ const bannerSchema = new Schema({
     },
     link: {
         type: String,
-        required: true
+        default: ''
     }
 
 }, { timestamps: true })

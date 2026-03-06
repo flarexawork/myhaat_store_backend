@@ -131,22 +131,38 @@ class productController {
         }
     }
     product_update = async (req, res) => {
+        const { id } = req
         let { name, description, discount, price, brand, productId, stock } = req.body;
         name = name.trim()
         name = name.replace(/[^a-zA-Z0-9\s-]/g, '')
         const slug = name.split(' ').join('-')
 
         try {
+            const product = await productModel.findById(productId)
+
+            if (!product) {
+                return responseReturn(res, 404, { error: 'Product not found' })
+            }
+
+            if (String(product.sellerId) !== String(id)) {
+                return responseReturn(res, 403, { error: 'Unauthorized product access' })
+            }
+
+            if (product.approval_status === 'approved') {
+                return responseReturn(res, 400, { error: 'Approved product cannot be edited by seller' })
+            }
+
             await productModel.findByIdAndUpdate(productId, {
                 name, description, discount, price, brand, productId, stock, slug
             })
-            const product = await productModel.findById(productId)
-            responseReturn(res, 200, { product, message: 'product update success' })
+            const updatedProduct = await productModel.findById(productId)
+            responseReturn(res, 200, { product: updatedProduct, message: 'product update success' })
         } catch (error) {
             responseReturn(res, 500, { error: error.message })
         }
     }
     product_image_update = async (req, res) => {
+        const { id } = req
         const form = formidable({ multiples: true })
 
         form.parse(req, async (err, field, files) => {
@@ -157,6 +173,20 @@ class productController {
                 responseReturn(res, 404, { error: err.message })
             } else {
                 try {
+                    const product = await productModel.findById(productId)
+
+                    if (!product) {
+                        return responseReturn(res, 404, { error: 'Product not found' })
+                    }
+
+                    if (String(product.sellerId) !== String(id)) {
+                        return responseReturn(res, 403, { error: 'Unauthorized product access' })
+                    }
+
+                    if (product.approval_status === 'approved') {
+                        return responseReturn(res, 400, { error: 'Approved product cannot be edited by seller' })
+                    }
+
                     cloudinary.config({
                         cloud_name: process.env.cloud_name,
                         api_key: process.env.api_key,
@@ -166,8 +196,11 @@ class productController {
                     const result = await cloudinary.uploader.upload(newImage.filepath, { folder: 'products' })
 
                     if (result) {
-                        let { images } = await productModel.findById(productId)
+                        let { images } = product
                         const index = images.findIndex(img => img === oldImage)
+                        if (index === -1) {
+                            return responseReturn(res, 400, { error: 'Old image not found for this product' })
+                        }
                         images[index] = result.secure_url;
 
                         await productModel.findByIdAndUpdate(productId, {
