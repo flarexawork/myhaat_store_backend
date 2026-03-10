@@ -2,7 +2,7 @@ const nodemailer = require('nodemailer')
 
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
+    port: Number(process.env.SMTP_PORT),
     secure: false,
     auth: {
         user: process.env.SMTP_USER,
@@ -13,7 +13,7 @@ const transporter = nodemailer.createTransport({
 const sendMail = async ({ to, subject, html }) => {
     try {
         await transporter.sendMail({
-            from: `"Ecommerce App" <${process.env.SMTP_USER}>`,
+            from: `"${process.env.MAIL_FROM_NAME || 'MyHaat'}" <${process.env.SMTP_USER}>`,
             to,
             subject,
             html

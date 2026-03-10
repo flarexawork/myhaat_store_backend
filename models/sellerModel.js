@@ -21,6 +21,18 @@ const sellerSchema = new Schema({
         required: true,
         select: false
     },
+    isEmailVerified: {
+        type: Boolean,
+        default: false
+    },
+    emailVerificationToken: {
+        type: String,
+        select: false
+    },
+    emailVerificationExpires: {
+        type: Date,
+        select: false
+    },
     role: {
         type: String,
         default: 'seller'

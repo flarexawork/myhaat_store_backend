@@ -2,13 +2,45 @@ const adminModel = require('../models/adminModel')
 const sellerModel = require('../models/sellerModel')
 const sellerCustomerModel = require('../models/chat/sellerCustomerModel')
 const bcrpty = require('bcrypt')
+const crypto = require('crypto')
 const formidable = require('formidable')
 const cloudinary = require('cloudinary').v2
 const { responseReturn } = require('../utiles/response')
 const { createToken } = require('../utiles/tokenCreate')
 
 const sendMail = require('../utiles/mailer')
-const welcomeTemplate = require('../utiles/Template/welcome')
+const emailVerificationTemplate = require('../utiles/Template/emailVerification')
+
+const EMAIL_VERIFICATION_EXPIRES_MS = 24 * 60 * 60 * 1000
+
+const normalizeEmail = (email = '') => email.trim().toLowerCase()
+
+const hashToken = (value) => crypto.createHash('sha256').update(value).digest('hex')
+
+const getSellerFrontendUrl = () => {
+    return (
+        process.env.SELLER_FRONTEND_URL ||
+        process.env.admin_panel_production_url ||
+        process.env.admin_panel_lcoal_url ||
+        'http://localhost:3001'
+    ).replace(/\/+$/, '')
+}
+
+const sendSellerVerificationEmail = async (seller) => {
+    const verificationToken = crypto.randomBytes(32).toString('hex')
+
+    seller.emailVerificationToken = hashToken(verificationToken)
+    seller.emailVerificationExpires = new Date(Date.now() + EMAIL_VERIFICATION_EXPIRES_MS)
+    await seller.save()
+
+    const verificationLink = `${getSellerFrontendUrl()}/email-verify?token=${verificationToken}`
+
+    await sendMail({
+        to: seller.email,
+        subject: 'Verify Your Email - MyHaat',
+        html: emailVerificationTemplate(seller.name, verificationLink)
+    })
+}
 
 
 
@@ -60,7 +92,7 @@ class authControllers {
             // Build dynamic query
             const query = isMobile
                 ? { mobile: credential }
-                : { email: credential.toLowerCase() }
+                : { email: normalizeEmail(credential) }
 
             const seller = await sellerModel
                 .findOne(query)
@@ -68,6 +100,13 @@ class authControllers {
 
             if (!seller) {
                 return responseReturn(res, 404, { error: "Invalid email or mobile" })
+            }
+
+            if (seller.isEmailVerified === false) {
+                return responseReturn(res, 403, {
+                    success: false,
+                    message: 'Please verify your email before logging in'
+                })
             }
 
             const match = await bcrpty.compare(password, seller.password)
@@ -115,7 +154,9 @@ class authControllers {
             }
 
 
-            const emailExist = await sellerModel.findOne({ email })
+            const normalizedEmail = normalizeEmail(email)
+
+            const emailExist = await sellerModel.findOne({ email: normalizedEmail })
             if (emailExist) {
                 return responseReturn(res, 409, { error: 'Email already exists' })
             }
@@ -129,11 +170,12 @@ class authControllers {
 
             const seller = await sellerModel.create({
                 name,
-                email,
+                email: normalizedEmail,
                 mobile,
                 password: await bcrpty.hash(password, 10),
                 method: 'manually',
-                shopInfo: {}
+                shopInfo: {},
+                isEmailVerified: false
             })
 
             await sellerCustomerModel.create({
@@ -146,17 +188,112 @@ class authControllers {
                 expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
                 httpOnly: true
             })
-            await sendMail({
-                to: email,
-                subject: "Welcome to Ecommerce",
-                html: welcomeTemplate(name)
-            })
 
-            return responseReturn(res, 201, { token, message: 'Register success' })
+            let emailSent = true
+            try {
+                await sendSellerVerificationEmail(seller)
+            } catch (mailError) {
+                emailSent = false
+                console.log(mailError.message)
+            }
+
+            return responseReturn(res, 201, {
+                token,
+                message: emailSent
+                    ? 'Register success. Please verify your email.'
+                    : 'Register success, but the verification email could not be sent.'
+            })
 
         } catch (error) {
             console.log(error)
             return responseReturn(res, 500, { error: error.message })
+        }
+    }
+
+    seller_verify_email = async (req, res) => {
+        const { token } = req.query
+
+        try {
+            if (!token) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'Invalid or expired verification link'
+                })
+            }
+
+            const seller = await sellerModel
+                .findOne({
+                    emailVerificationToken: hashToken(token),
+                    emailVerificationExpires: { $gt: new Date() }
+                })
+                .select('+emailVerificationToken +emailVerificationExpires')
+
+            if (!seller) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'Invalid or expired verification link'
+                })
+            }
+
+            seller.isEmailVerified = true
+            seller.emailVerificationToken = null
+            seller.emailVerificationExpires = null
+            await seller.save()
+
+            return responseReturn(res, 200, {
+                success: true,
+                message: 'Email verified successfully'
+            })
+        } catch (error) {
+            console.log(error)
+            return responseReturn(res, 500, {
+                success: false,
+                message: 'Internal server error'
+            })
+        }
+    }
+
+    seller_resend_verification = async (req, res) => {
+        const { email } = req.body
+
+        try {
+            if (!email) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'Email is required'
+                })
+            }
+
+            const seller = await sellerModel
+                .findOne({ email: normalizeEmail(email) })
+                .select('+emailVerificationToken +emailVerificationExpires')
+
+            if (!seller) {
+                return responseReturn(res, 404, {
+                    success: false,
+                    message: 'Email not found'
+                })
+            }
+
+            if (seller.isEmailVerified) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'Email already verified'
+                })
+            }
+
+            await sendSellerVerificationEmail(seller)
+
+            return responseReturn(res, 200, {
+                success: true,
+                message: 'Verification email sent successfully'
+            })
+        } catch (error) {
+            console.log(error)
+            return responseReturn(res, 500, {
+                success: false,
+                message: 'Unable to send verification email'
+            })
         }
     }
 
