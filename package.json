@@ -2,11 +2,10 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "server": "nodemon server.js",
-    "start": "node server.js",
-    "build": "react-scripts build"
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
@@ -25,8 +24,6 @@
     "mongoose": "^7.0.4",
     "nodemailer": "^8.0.1",
     "razorpay": "^2.9.6",
-    "react-script": "^2.0.5",
-    "react-scripts": "^5.0.1",
     "socket.io": "^4.6.1",
     "stripe": "^12.18.0",
     "uuid": "^9.0.0"
