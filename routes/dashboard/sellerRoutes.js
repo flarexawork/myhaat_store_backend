@@ -8,6 +8,7 @@ router.get('/get-sellers',authMiddleware,sellerController.get_active_sellers)
 router.get('/get-deactive-sellers',authMiddleware,sellerController.get_deactive_sellers)
 
 router.get('/get-seller/:sellerId',authMiddleware,sellerController.get_seller)
+router.patch('/admin/seller/:id/status',authMiddleware,sellerController.toggle_seller_status)
 router.post('/seller-status-update',authMiddleware,sellerController.seller_status_update)
 
 module.exports = router

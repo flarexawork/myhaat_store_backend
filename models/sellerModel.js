@@ -57,6 +57,63 @@ const sellerSchema = new Schema({
         type: Object,
         default: {}
     },
+    shopDetails: {
+        shopName: {
+            type: String
+        },
+        division: {
+            type: String
+        },
+        district: {
+            type: String
+        },
+        subDistrict: {
+            type: String
+        },
+        shopImage: {
+            type: String
+        },
+        shopImages: {
+            type: [String],
+            default: []
+        }
+    },
+    identityDetails: {
+        fullName: {
+            type: String
+        },
+        address: {
+            type: String
+        },
+        documentType: {
+            type: String,
+            enum: ['aadhaar', 'pan']
+        },
+        documentNumber: {
+            type: String
+        },
+        documentImage: {
+            type: String
+        },
+        documentImages: {
+            type: [String],
+            default: []
+        }
+    },
+    verificationStatus: {
+        type: String,
+        enum: ['pending_details', 'pending_admin', 'approved'],
+        default: 'pending_details'
+    },
+    accountStatus: {
+        type: String,
+        enum: ['active', 'inactive'],
+        default: 'active'
+    },
+    adminRemark: {
+        type: String,
+        default: ''
+    },
 }, { timestamps: true })
 
 sellerSchema.index({

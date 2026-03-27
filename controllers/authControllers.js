@@ -7,6 +7,12 @@ const formidable = require('formidable')
 const cloudinary = require('cloudinary').v2
 const { responseReturn } = require('../utiles/response')
 const { createToken } = require('../utiles/tokenCreate')
+const {
+    getSellerVerificationFlags,
+    normalizeAccountStatus,
+    normalizeAdminRemark,
+    normalizeVerificationMedia
+} = require('../utiles/sellerVerification')
 
 const sendMail = require('../utiles/mailer')
 const emailVerificationTemplate = require('../utiles/Template/emailVerification')
@@ -129,7 +135,8 @@ class authControllers {
 
             return responseReturn(res, 200, {
                 token,
-                message: 'Login success'
+                message: 'Login success',
+                ...getSellerVerificationFlags(seller)
             })
 
         } catch (error) {
@@ -307,7 +314,25 @@ class authControllers {
                 responseReturn(res, 200, { userInfo: user })
             } else {
                 const seller = await sellerModel.findById(id)
-                responseReturn(res, 200, { userInfo: seller })
+                const verificationFlags = getSellerVerificationFlags(seller)
+                const userInfo = seller ? seller.toObject() : null
+
+                if (userInfo) {
+                    const normalizedUserInfo = normalizeVerificationMedia(userInfo)
+                    normalizedUserInfo.verificationStatus = verificationFlags.verificationStatus
+                    normalizedUserInfo.accountStatus = normalizeAccountStatus(seller)
+                    normalizedUserInfo.adminRemark = normalizeAdminRemark(seller)
+
+                    return responseReturn(res, 200, {
+                        userInfo: normalizedUserInfo,
+                        ...verificationFlags
+                    })
+                }
+
+                responseReturn(res, 200, {
+                    userInfo,
+                    ...verificationFlags
+                })
             }
         } catch (error) {
             responseReturn(res, 500, { error: 'Internal server error' })
@@ -344,17 +369,20 @@ class authControllers {
     }
 
     profile_info_add = async (req, res) => {
-        const { division, district, shopName, sub_district } = req.body;
+        const { division, district, shopName, sub_district, subDistrict } = req.body;
         const { id } = req;
+        const resolvedSubDistrict = subDistrict || sub_district
 
         try {
             await sellerModel.findByIdAndUpdate(id, {
-                shopInfo: {
-                    shopName,
-                    division,
-                    district,
-                    sub_district
-                }
+                'shopInfo.shopName': shopName,
+                'shopInfo.division': division,
+                'shopInfo.district': district,
+                'shopInfo.sub_district': resolvedSubDistrict,
+                'shopDetails.shopName': shopName,
+                'shopDetails.division': division,
+                'shopDetails.district': district,
+                'shopDetails.subDistrict': resolvedSubDistrict
             })
             const userInfo = await sellerModel.findById(id)
             responseReturn(res, 201, { message: 'Profile info add success', userInfo })
