@@ -1,4 +1,5 @@
 const express = require('express')
+const path = require('path')
 const {
     dbConnect
 } = require('./utiles/db')
@@ -14,6 +15,8 @@ const socket = require('socket.io')
 const mode = process.env.mode
 
 const server = http.createServer(app)
+
+app.disable('x-powered-by')
 
 app.use(cors({
     origin: mode === 'production' ? ['http://localhost:3000', process.env.user_panel_production_url, process.env.admin_panel_production_url] : ['http://localhost:3000', 'http://localhost:3001'],
@@ -211,9 +214,25 @@ app.use('/api', require('./routes/dashboard/sellerRoutes'))
 app.use('/api', require('./routes/dashboard/categoryRoutes'))
 app.use('/api', require('./routes/dashboard/productRoutes'));
 
+const publicDir = path.join(__dirname, 'public')
 
+app.use(express.static(publicDir, {
+    extensions: ['html'],
+    index: false
+}))
 
-app.get('/', (req, res) => res.send('Hello World!'))
+app.get('/', (req, res) => {
+    res.set({
+        'Cache-Control': 'public, max-age=300',
+        'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests",
+        'Referrer-Policy': 'no-referrer',
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
+    })
+
+    res.sendFile(path.join(publicDir, 'index.html'))
+})
 
 const port = process.env.PORT
 dbConnect()
