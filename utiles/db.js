@@ -1,7 +1,7 @@
 // const mongoose = require('mongoose');
 
 // module.exports.dbConnect = async () => {
-//     const MODE = process.env.mode
+//     const MODE = process.env.MODE
 //     try {
 //         if (MODE === 'production') {
 //             await mongoose.connect(process.env.DB_PRODUCTION_URL, { useNewURLParser: true })
@@ -19,7 +19,7 @@
 const mongoose = require('mongoose');
 
 module.exports.dbConnect = async () => {
-    const MODE = process.env.mode
+    const MODE = process.env.MODE
 
     try {
         if (MODE === 'production') {

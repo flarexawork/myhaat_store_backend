@@ -12,7 +12,7 @@ require('dotenv').config()
 
 const socket = require('socket.io')
 
-const MODE = process.env.mode
+const MODE = process.env.MODE
 
 const server = http.createServer(app)
 
