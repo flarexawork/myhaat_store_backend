@@ -19,13 +19,13 @@ const server = http.createServer(app)
 app.disable('x-powered-by')
 
 app.use(cors({
-    origin: MODE === 'production' ? ['http://localhost:3000', process.env.USER_PANEL_PRODUCTION_URL, process.env.admin_panel_production_url] : ['http://localhost:3000', 'http://localhost:3001'],
+    origin: MODE === 'production' ? ['http://localhost:3000', process.env.USER_PANEL_PRODUCTION_URL, process.env.ADMIN_PANEL_PRODUCTION_URL] : ['http://localhost:3000', 'http://localhost:3001'],
     credentials: true
 }))
 
 const io = socket(server, {
     cors: {
-        origin: MODE === 'production' ? ['http://localhost:3000', process.env.USER_PANEL_PRODUCTION_URL, process.env.admin_panel_production_url] : ['http://localhost:3000', 'http://localhost:3001'],
+        origin: MODE === 'production' ? ['http://localhost:3000', process.env.USER_PANEL_PRODUCTION_URL, process.env.ADMIN_PANEL_PRODUCTION_URL] : ['http://localhost:3000', 'http://localhost:3001'],
         credentials: true
     }
 })
