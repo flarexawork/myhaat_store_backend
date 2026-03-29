@@ -18,8 +18,8 @@ const crypto = require('crypto')
 const Razorpay = require('razorpay')
 
 const razorpay = new Razorpay({
-    key_id: process.env.razorpay_key_id,
-    key_secret: process.env.razorpay_key_secret
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET
 })
 
 class orderController {
@@ -309,7 +309,7 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Incomplete payment data' })
             }
 
-            const keySecret = process.env.razorpay_key_secret
+            const keySecret = process.env.RAZORPAY_KEY_SECRET
 
             if (!keySecret) {
                 return responseReturn(res, 500, { message: 'Razorpay key secret missing' })
@@ -385,7 +385,7 @@ class orderController {
 
         try {
 
-            const secret = process.env.razorpay_webhook_secret
+            const secret = process.env.RAZORPAY_WEBHOOK_SECRET
             const rawBody = req.rawBody
             const signatureHeader = req.headers["x-razorpay-signature"]
 

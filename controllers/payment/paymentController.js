@@ -8,8 +8,8 @@ const { mongo: { ObjectId } } = require('mongoose')
 const Razorpay = require('razorpay')
 
 const razorpay = new Razorpay({
-    key_id: process.env.razorpay_key_id,
-    key_secret: process.env.razorpay_key_secret
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET
 })
 
 class paymentController {

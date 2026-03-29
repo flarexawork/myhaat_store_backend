@@ -37,8 +37,8 @@ const buildCustomerPayload = (customer) => ({
 const getClientBaseUrl = () => {
     return (
         process.env.FRONTEND_URL ||
-        process.env.user_panel_production_url ||
-        process.env.user_panel_lcoal_url ||
+        process.env.USER_PANEL_PRODUCTION_URL ||
+        process.env.USER_PANEL_LCOAL_URL ||
         'http://localhost:3000'
     ).replace(/\/+$/, '')
 }
