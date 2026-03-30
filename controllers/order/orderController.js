@@ -55,30 +55,32 @@ class orderController {
     /* ================================================= */
     /* AUTO CANCEL ONLINE UNPAID (15 MIN)               */
     /* ================================================= */
-    paymentCheck = async (id) => {
-        try {
+   paymentCheck = async (id) => {
+    try {
+        const order = await customerOrder.findById(id)
 
-            const order = await customerOrder.findById(id)
+        if (!order) return
 
-            if (
-                order &&
-                order.payment_type === 'online' &&
-                order.payment_status === 'pending'
-            ) {
-                await customerOrder.findByIdAndUpdate(id, {
-                    delivery_status: 'cancelled'
-                })
+        const isOnline = order.payment_type === 'online'
+        const isPending = order.payment_status === 'pending'
+        const isFailed = order.payment_status === 'failed'
 
-                await authOrderModel.updateMany(
-                    { orderId: id },
-                    { delivery_status: 'cancelled' }
-                )
-            }
+        if (isOnline && (isPending || isFailed)) {
 
-        } catch (error) {
-            console.log("paymentCheck error:", error)
+            await customerOrder.findByIdAndUpdate(id, {
+                delivery_status: 'cancelled'
+            })
+
+            await authOrderModel.updateMany(
+                { orderId: id },
+                { delivery_status: 'cancelled' }
+            )
         }
+
+    } catch (error) {
+        console.log("paymentCheck error:", error)
     }
+}
 
     /* ================================================= */
     /* PLACE ORDER                                      */
