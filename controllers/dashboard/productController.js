@@ -302,7 +302,7 @@ class productController {
             const productsWithStats = await Promise.all(
                 products.map(async (product) => {
 
-                    const sellerId = product.sellerId._id;
+                    const sellerId = product.sellerId;
 
                     const totalOrders = await authOrderModel.countDocuments({
                         sellerId
