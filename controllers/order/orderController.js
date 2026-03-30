@@ -55,32 +55,32 @@ class orderController {
     /* ================================================= */
     /* AUTO CANCEL ONLINE UNPAID (15 MIN)               */
     /* ================================================= */
-   paymentCheck = async (id) => {
-    try {
-        const order = await customerOrder.findById(id)
+    paymentCheck = async (id) => {
+        try {
+            const order = await customerOrder.findById(id)
 
-        if (!order) return
+            if (!order) return
 
-        const isOnline = order.payment_type === 'online'
-        const isPending = order.payment_status === 'pending'
-        const isFailed = order.payment_status === 'failed'
+            const isOnline = order.payment_type === 'online'
+            const isPending = order.payment_status === 'pending'
+            const isFailed = order.payment_status === 'failed'
 
-        if (isOnline && (isPending || isFailed)) {
+            if (isOnline && (isPending || isFailed)) {
 
-            await customerOrder.findByIdAndUpdate(id, {
-                delivery_status: 'cancelled'
-            })
+                await customerOrder.findByIdAndUpdate(id, {
+                    delivery_status: 'cancelled'
+                })
 
-            await authOrderModel.updateMany(
-                { orderId: id },
-                { delivery_status: 'cancelled' }
-            )
+                await authOrderModel.updateMany(
+                    { orderId: id },
+                    { delivery_status: 'cancelled' }
+                )
+            }
+
+        } catch (error) {
+            console.log("paymentCheck error:", error)
         }
-
-    } catch (error) {
-        console.log("paymentCheck error:", error)
     }
-}
 
     /* ================================================= */
     /* PLACE ORDER                                      */
@@ -106,7 +106,16 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Invalid order data' })
             }
 
-            const tempDate = moment(Date.now()).format('LLL')
+            const tempDate = new Date(); 
+            const formattedDate = tempDate.toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
 
             let authorOrderData = []
             let cardId = []

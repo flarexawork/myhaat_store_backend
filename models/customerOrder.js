@@ -81,11 +81,10 @@ const customerOrderSchema = new Schema({
         default: 10
     },
 
-
-    date: {
-        type: String,
-        required: true
-    }
+date: {
+    type: Date,
+    default: Date.now
+}
 
 }, { timestamps: true })
 
