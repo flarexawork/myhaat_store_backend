@@ -4,6 +4,7 @@ const productModel = require('../../models/productModel');
 const sellerModel = require('../../models/sellerModel')
 const { responseReturn } = require('../../utiles/response');
 const authOrderModel = require('../../models/authOrder');
+const { getActiveSellers } = require('../../utiles/activeSellerFilter');
 
 class productController {
 
@@ -20,9 +21,9 @@ class productController {
 
 
             cloudinary.config({
-                CLOUD_NAME: process.env.CLOUD_NAME,
-                API_KEY: process.env.API_KEY,
-                API_SECRET: process.env.API_SECRET,
+                cloud_name: process.env.CLOUD_NAME,
+                api_key: process.env.API_KEY,
+                api_secret: process.env.API_SECRET,
                 secure: true
             })
 
@@ -72,9 +73,9 @@ class productController {
 
             // cloudinary config
             cloudinary.config({
-                CLOUD_NAME: process.env.CLOUD_NAME,
-                API_KEY: process.env.API_KEY,
-                API_SECRET: process.env.API_SECRET,
+                cloud_name: process.env.CLOUD_NAME,
+                api_key: process.env.API_KEY,
+                api_secret: process.env.API_SECRET,
                 secure: true
             });
 
@@ -188,9 +189,9 @@ class productController {
                     }
 
                     cloudinary.config({
-                        CLOUD_NAME: process.env.CLOUD_NAME,
-                        API_KEY: process.env.API_KEY,
-                        API_SECRET: process.env.API_SECRET,
+                        cloud_name: process.env.CLOUD_NAME,
+                        api_key: process.env.API_KEY,
+                        api_secret: process.env.API_SECRET,
                         secure: true
                     })
                     const result = await cloudinary.uploader.upload(newImage.filepath, { folder: 'products' })
@@ -268,13 +269,17 @@ class productController {
         const skipPage = parseInt(parPage) * (parseInt(page) - 1);
 
         try {
+            const activeSellers = await getActiveSellers();
 
-            let query = {};
+            let query = {
+                sellerId: { $in: activeSellers }
+            };
 
             if (searchValue) {
 
                 const sellers = await sellerModel.find({
-                    name: { $regex: searchValue, $options: "i" }
+                    name: { $regex: searchValue, $options: "i" },
+                    status: 'active'
                 }).select('_id');
 
                 const sellerIds = sellers.map(s => s._id);
@@ -361,6 +366,11 @@ class productController {
                 });
 
             if (!product) {
+                return responseReturn(res, 404, { error: 'Product not found' });
+            }
+
+            // Check if seller is active
+            if (product.sellerId && product.sellerId.status !== 'active') {
                 return responseReturn(res, 404, { error: 'Product not found' });
             }
 

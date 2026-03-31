@@ -12,6 +12,7 @@ const {
 const {
     responseReturn
 } = require('../../utiles/response')
+const { getActiveSellers } = require('../../utiles/activeSellerFilter')
 class homeControllers {
 
     formateProduct = (products) => {
@@ -44,18 +45,24 @@ class homeControllers {
 
     get_products = async (req, res) => {
         try {
-            const products = await productModel.find({ approval_status: 'approved' }).limit(16).sort({
+            const activeSellers = await getActiveSellers();
+            const query = { 
+                approval_status: 'approved',
+                sellerId: { $in: activeSellers }
+            };
+            
+            const products = await productModel.find(query).limit(16).sort({
                 createdAt: -1
             })
-            const allProduct1 = await productModel.find({ approval_status: 'approved' }).limit(9).sort({
+            const allProduct1 = await productModel.find(query).limit(9).sort({
                 createdAt: -1
             })
             const latest_product = this.formateProduct(allProduct1);
-            const allProduct2 = await productModel.find({ approval_status: 'approved' }).limit(9).sort({
+            const allProduct2 = await productModel.find(query).limit(9).sort({
                 rating: -1
             })
             const topRated_product = this.formateProduct(allProduct2);
-            const allProduct3 = await productModel.find({ approval_status: 'approved' }).limit(9).sort({
+            const allProduct3 = await productModel.find(query).limit(9).sort({
                 discount: -1
             })
             const discount_product = this.formateProduct(allProduct3);
@@ -76,12 +83,22 @@ class homeControllers {
             slug
         } = req.params
         try {
-            const product = await productModel.findOne({
+            const activeSellers = await getActiveSellers();
+            const query = { 
                 approval_status: 'approved',
-                slug
-            })
+                slug,
+                sellerId: { $in: activeSellers }
+            };
+            
+            const product = await productModel.findOne(query)
+            
+            if (!product) {
+                return responseReturn(res, 404, { error: 'Product not found' })
+            }
+            
             const relatedProducts = await productModel.find({
                 approval_status: 'approved',
+                sellerId: { $in: activeSellers },
                 $and: [{
                     _id: {
                         $ne: product.id
@@ -96,7 +113,7 @@ class homeControllers {
             }).limit(20)
             const moreProducts = await productModel.find({
                 approval_status: 'approved',
-
+                sellerId: { $in: activeSellers },
                 $and: [{
                     _id: {
                         $ne: product.id
@@ -125,11 +142,17 @@ class homeControllers {
                 low: 0,
                 high: 0
             }
-            const products = await productModel.find({ approval_status: 'approved' }).limit(9).sort({
+            const activeSellers = await getActiveSellers();
+            const query = { 
+                approval_status: 'approved',
+                sellerId: { $in: activeSellers }
+            };
+            
+            const products = await productModel.find(query).limit(9).sort({
                 createdAt: -1
             })
             const latest_product = this.formateProduct(products);
-            const getForPrice = await productModel.find({ approval_status: 'approved' }).sort({
+            const getForPrice = await productModel.find(query).sort({
                 'price': 1
             })
             if (getForPrice.length > 0) {
@@ -149,7 +172,13 @@ class homeControllers {
         const parPage = 12
         req.query.parPage = parPage
         try {
-            const products = await productModel.find({ approval_status: 'approved' }).sort({
+            const activeSellers = await getActiveSellers();
+            const query = { 
+                approval_status: 'approved',
+                sellerId: { $in: activeSellers }
+            };
+            
+            const products = await productModel.find(query).sort({
                 createdAt: -1
             })
             const totalProduct = new queryProducts(products, req.query).categoryQuery().searchQuery().priceQuery().ratingQuery().sortByPrice().countProducts();

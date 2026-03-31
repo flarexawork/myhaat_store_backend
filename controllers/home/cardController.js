@@ -1,5 +1,6 @@
 const cardModel = require('../../models/cardModel')
 const wishlistModel = require('../../models/wishlistModel')
+const productModel = require('../../models/productModel')
 const {
     responseReturn
 } = require('../../utiles/response')
@@ -8,6 +9,7 @@ const {
         ObjectId
     }
 } = require('mongoose')
+const { getActiveSellers } = require('../../utiles/activeSellerFilter')
 class cardController {
     add_to_card = async (req, res) => {
         const {
@@ -54,6 +56,7 @@ class cardController {
             userId
         } = req.params
         try {
+            const activeSellers = await getActiveSellers();
             const card_products = await cardModel.aggregate([{
                     $match: {
                         userId: {
@@ -67,6 +70,11 @@ class cardController {
                         localField: 'productId',
                         foreignField: "_id",
                         as: 'products'
+                    }
+                },
+                {
+                    $match: {
+                        'products.0.sellerId': { $in: activeSellers }
                     }
                 }
             ])
@@ -225,12 +233,24 @@ class cardController {
             userId
         } = req.params;
         try {
+            const activeSellers = await getActiveSellers();
             const wishlists = await wishlistModel.find({
                 userId
             })
+            
+            // Filter wishlists to only include products from active sellers
+            const filteredWishlists = [];
+            for (const wishlist of wishlists) {
+                const product = await productModel.findById(wishlist.productId);
+                
+                if (product && activeSellers.includes(product.sellerId.toString())) {
+                    filteredWishlists.push(wishlist);
+                }
+            }
+            
             responseReturn(res, 200, {
-                wishlistCount: wishlists.length,
-                wishlists
+                wishlistCount: filteredWishlists.length,
+                wishlists: filteredWishlists
             })
         } catch (error) {
             console.log(error.message)
