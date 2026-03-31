@@ -2,26 +2,53 @@ const categoryModel = require('../../models/categoryModel')
 const { responseReturn } = require('../../utiles/response')
 const cloudinary = require('cloudinary').v2
 const formidable = require('formidable')
+const { mongo: { ObjectId } } = require('mongoose')
+
+const getFormValue = (value) => Array.isArray(value) ? value[0] : value
+const getFormFile = (value) => Array.isArray(value) ? value[0] : value
+
+const getCloudinaryPublicId = (url = '') => {
+    if (!url) return null
+
+    const parts = url.split('/')
+    const uploadIndex = parts.findIndex((part) => part === 'upload')
+    if (uploadIndex === -1) return null
+
+    let publicIdParts = parts.slice(uploadIndex + 1)
+    if (publicIdParts[0] && publicIdParts[0].startsWith('v')) {
+        publicIdParts = publicIdParts.slice(1)
+    }
+
+    if (!publicIdParts.length) return null
+    return publicIdParts.join('/').replace(/\.[^/.]+$/, '')
+}
+
+const configureCloudinary = () => cloudinary.config({
+    cloud_name: process.env.CLOUD_NAME,
+    api_key: process.env.API_KEY,
+    api_secret: process.env.API_SECRET,
+    secure: true
+})
 
 class categoryController {
 
     add_category = async (req, res) => {
-        const form = formidable()
+        const form = formidable({})
         form.parse(req, async (err, fields, files) => {
             if (err) {
                 responseReturn(res, 404, { error: 'something error' })
             } else {
-                let { name } = fields
-                let { image } = files
+                let name = getFormValue(fields.name)
+                const image = getFormFile(files.image)
+
+                if (!name || !image) {
+                    return responseReturn(res, 400, { error: 'Name and image are required' })
+                }
+
                 name = name.trim()
                 const slug = name.split(' ').join('-')
 
-                cloudinary.config({
-                    CLOUD_NAME: process.env.CLOUD_NAME,
-                    API_KEY: process.env.API_KEY,
-                    API_SECRET: process.env.API_SECRET,
-                    secure: true
-                })
+                configureCloudinary()
 
                 try {
                     const result = await cloudinary.uploader.upload(image.filepath, { folder: 'categorys' })
@@ -42,6 +69,100 @@ class categoryController {
 
             }
         })
+    }
+
+    update_category = async (req, res) => {
+        if (req.role !== 'admin') {
+            return responseReturn(res, 401, { message: 'unauthorized' })
+        }
+
+        const { categoryId } = req.params
+        if (!categoryId || !ObjectId.isValid(categoryId)) {
+            return responseReturn(res, 400, { error: 'Valid category id is required' })
+        }
+
+        const form = formidable({})
+        form.parse(req, async (err, fields, files) => {
+            if (err) {
+                return responseReturn(res, 400, { error: 'Unable to process category update request' })
+            }
+
+            const image = getFormFile(files.image)
+            const nameValue = getFormValue(fields.name)
+
+            try {
+                const category = await categoryModel.findById(categoryId)
+                if (!category) {
+                    return responseReturn(res, 404, { error: 'Category not found' })
+                }
+
+                const name = (nameValue ? nameValue.trim() : category.name)
+                if (!name) {
+                    return responseReturn(res, 400, { error: 'Category name is required' })
+                }
+
+                const payload = {
+                    name,
+                    slug: name.split(' ').join('-')
+                }
+
+                if (image) {
+                    configureCloudinary()
+
+                    const publicId = getCloudinaryPublicId(category.image)
+                    if (publicId) {
+                        await cloudinary.uploader.destroy(publicId)
+                    }
+
+                    const result = await cloudinary.uploader.upload(image.filepath, { folder: 'categorys' })
+                    payload.image = result.secure_url
+                }
+
+                const updatedCategory = await categoryModel.findByIdAndUpdate(categoryId, payload, { new: true })
+                return responseReturn(res, 200, {
+                    category: updatedCategory,
+                    message: 'category update success'
+                })
+            } catch (error) {
+                console.log(error.message)
+                return responseReturn(res, 500, { error: 'Internal server error' })
+            }
+        })
+    }
+
+    delete_category = async (req, res) => {
+        if (req.role !== 'admin') {
+            return responseReturn(res, 401, { message: 'unauthorized' })
+        }
+
+        const { categoryId } = req.params
+        if (!categoryId || !ObjectId.isValid(categoryId)) {
+            return responseReturn(res, 400, { error: 'Valid category id is required' })
+        }
+
+        configureCloudinary()
+
+        try {
+            const category = await categoryModel.findById(categoryId)
+            if (!category) {
+                return responseReturn(res, 404, { error: 'Category not found' })
+            }
+
+            const publicId = getCloudinaryPublicId(category.image)
+            if (publicId) {
+                await cloudinary.uploader.destroy(publicId)
+            }
+
+            await categoryModel.findByIdAndDelete(categoryId)
+
+            return responseReturn(res, 200, {
+                categoryId,
+                message: 'category delete success'
+            })
+        } catch (error) {
+            console.log(error.message)
+            return responseReturn(res, 500, { error: 'Internal server error' })
+        }
     }
 
     get_category = async (req, res) => {

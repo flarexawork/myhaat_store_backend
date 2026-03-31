@@ -37,11 +37,11 @@ class bannerController {
             }
 
             cloudinary.config({
-                CLOUD_NAME: process.env.CLOUD_NAME,
-                API_KEY: process.env.API_KEY,
-                API_SECRET: process.env.API_SECRET,
-                secure: false
-            })
+            cloud_name: process.env.CLOUD_NAME,
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET,
+            secure: true
+        })
 
             try {
                 let finalLink = String(link || '').trim()
@@ -151,9 +151,9 @@ class bannerController {
             }
 
             cloudinary.config({
-                CLOUD_NAME: process.env.CLOUD_NAME,
-                API_KEY: process.env.API_KEY,
-                API_SECRET: process.env.API_SECRET,
+                cloud_name: process.env.CLOUD_NAME,
+                api_key: process.env.API_KEY,
+                api_secret: process.env.API_SECRET,
                 secure: true
             })
 
@@ -196,10 +196,10 @@ class bannerController {
             return responseReturn(res, 400, { message: 'Valid bannerId required' })
         }
 
-        cloudinary.config({
-            CLOUD_NAME: process.env.CLOUD_NAME,
-            API_KEY: process.env.API_KEY,
-            API_SECRET: process.env.API_SECRET,
+       cloudinary.config({
+            cloud_name: process.env.CLOUD_NAME,
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET,
             secure: true
         })
 

@@ -344,9 +344,9 @@ class authControllers {
         const form = formidable({ multiples: true })
         form.parse(req, async (err, _, files) => {
             cloudinary.config({
-                CLOUD_NAME: process.env.CLOUD_NAME,
-                API_KEY: process.env.API_KEY,
-                API_SECRET: process.env.API_SECRET,
+                cloud_name: process.env.CLOUD_NAME,
+                api_key: process.env.API_KEY,
+                api_secret: process.env.API_SECRET,
                 secure: true
             })
             const { image } = files
