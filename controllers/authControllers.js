@@ -16,6 +16,16 @@ const {
 
 const sendMail = require('../utiles/mailer')
 const emailVerificationTemplate = require('../utiles/Template/emailVerification')
+const securityAlertTemplate = require('../utiles/Template/securityAlert')
+const {
+    escapeRegex,
+    getAdminPrivilegeRole,
+    getClientDevice,
+    getClientIp,
+    getStrongPasswordMessage,
+    isStrongPassword,
+    normalizeText
+} = require('../utiles/authSecurity')
 
 const EMAIL_VERIFICATION_EXPIRES_MS = 24 * 60 * 60 * 1000
 
@@ -48,6 +58,42 @@ const sendSellerVerificationEmail = async (seller) => {
     })
 }
 
+const clearDashboardAccessCookie = (res) => {
+    res.cookie('accessToken', '', {
+        expires: new Date(Date.now()),
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+    })
+}
+
+const sendSecurityEmail = async ({ to, title, intro, req }) => {
+    try {
+        await sendMail({
+            to,
+            subject: title,
+            html: securityAlertTemplate({
+                title,
+                intro,
+                time: new Date().toISOString(),
+                ip: getClientIp(req),
+                device: getClientDevice(req)
+            })
+        })
+    } catch (error) {
+        console.log(error.message)
+    }
+}
+
+const configureCloudinary = () => {
+    cloudinary.config({
+        cloud_name: process.env.CLOUD_NAME,
+        api_key: process.env.API_KEY,
+        api_secret: process.env.API_SECRET,
+        secure: true
+    })
+}
+
 
 
 
@@ -64,7 +110,7 @@ class authControllers {
                 if (match) {
                     const token = await createToken({
                         id: admin.id,
-                        role: admin.role
+                        role: 'admin'
                     })
                     res.cookie('accessToken', token, {
                         expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -311,7 +357,13 @@ class authControllers {
         try {
             if (role === 'admin') {
                 const user = await adminModel.findById(id)
-                responseReturn(res, 200, { userInfo: user })
+                if (!user) {
+                    return responseReturn(res, 404, { error: 'User not found' })
+                }
+
+                const userInfo = user.toObject()
+                userInfo.adminRole = getAdminPrivilegeRole(user)
+                responseReturn(res, 200, { userInfo })
             } else {
                 const seller = await sellerModel.findById(id)
                 const verificationFlags = getSellerVerificationFlags(seller)
@@ -343,14 +395,13 @@ class authControllers {
         const { id } = req
         const form = formidable({ multiples: true })
         form.parse(req, async (err, _, files) => {
-            cloudinary.config({
-                cloud_name: process.env.CLOUD_NAME,
-                api_key: process.env.API_KEY,
-                api_secret: process.env.API_SECRET,
-                secure: true
-            })
+            configureCloudinary()
             const { image } = files
             try {
+                if (!image?.filepath) {
+                    return responseReturn(res, 400, { error: 'Image is required' })
+                }
+
                 const result = await cloudinary.uploader.upload(image.filepath, { folder: 'profile' })
                 if (result) {
                     await sellerModel.findByIdAndUpdate(id, {
@@ -364,6 +415,56 @@ class authControllers {
             } catch (error) {
                 //console.log(error)
                 responseReturn(res, 500, { error: error.message })
+            }
+        })
+    }
+
+    admin_update_profile = async (req, res) => {
+        if (req.role !== 'admin') {
+            return responseReturn(res, 403, { message: 'unauthorized' })
+        }
+
+        const form = formidable({ multiples: false })
+
+        form.parse(req, async (err, _, files) => {
+            if (err) {
+                return responseReturn(res, 400, { message: 'Unable to process profile update' })
+            }
+
+            const { image } = files
+
+            try {
+                if (!image?.filepath) {
+                    return responseReturn(res, 400, { message: 'Image is required' })
+                }
+
+                configureCloudinary()
+
+                const result = await cloudinary.uploader.upload(image.filepath, { folder: 'profile' })
+
+                if (!result?.secure_url) {
+                    return responseReturn(res, 400, { message: 'Image upload failed' })
+                }
+
+                const admin = await adminModel.findByIdAndUpdate(
+                    req.id,
+                    { image: result.secure_url },
+                    { new: true }
+                )
+
+                if (!admin) {
+                    return responseReturn(res, 404, { message: 'Admin not found' })
+                }
+
+                const userInfo = admin.toObject()
+                userInfo.adminRole = getAdminPrivilegeRole(admin)
+
+                return responseReturn(res, 200, {
+                    message: 'Profile updated successfully',
+                    userInfo
+                })
+            } catch (error) {
+                return responseReturn(res, 500, { message: 'Unable to update profile' })
             }
         })
     }
@@ -388,6 +489,221 @@ class authControllers {
             responseReturn(res, 201, { message: 'Profile info add success', userInfo })
         } catch (error) {
             responseReturn(res, 500, { error: error.message })
+        }
+    }
+
+    seller_change_password = async (req, res) => {
+        const { currentPassword, newPassword, confirmPassword } = req.body
+
+        try {
+            if (req.role !== 'seller') {
+                return responseReturn(res, 403, { message: 'unauthorized' })
+            }
+
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                return responseReturn(res, 400, { message: 'All password fields are required' })
+            }
+
+            if (newPassword !== confirmPassword) {
+                return responseReturn(res, 400, { message: 'New password and confirm password do not match' })
+            }
+
+            if (!isStrongPassword(newPassword)) {
+                return responseReturn(res, 400, { message: getStrongPasswordMessage() })
+            }
+
+            const seller = await sellerModel.findById(req.id).select('+password')
+            if (!seller) {
+                return responseReturn(res, 404, { message: 'Seller not found' })
+            }
+
+            const passwordMatches = await bcrpty.compare(currentPassword, seller.password)
+            if (!passwordMatches) {
+                return responseReturn(res, 400, { message: 'Current password is incorrect' })
+            }
+
+            const reusedPassword = await bcrpty.compare(newPassword, seller.password)
+            if (reusedPassword) {
+                return responseReturn(res, 400, { message: 'New password must be different from your current password' })
+            }
+
+            seller.password = await bcrpty.hash(newPassword, 10)
+            seller.passwordChangedAt = new Date()
+            await seller.save()
+
+            clearDashboardAccessCookie(res)
+            await sendSecurityEmail({
+                to: seller.email,
+                title: 'Your Password Was Changed',
+                intro: `Hello ${seller.name}, your seller account password was changed successfully.`,
+                req
+            })
+
+            return responseReturn(res, 200, { message: 'Password changed successfully. Please login again.' })
+        } catch (error) {
+            return responseReturn(res, 500, { message: 'Unable to change password' })
+        }
+    }
+
+    admin_change_password = async (req, res) => {
+        const { currentPassword, newPassword, confirmPassword } = req.body
+
+        try {
+            if (req.role !== 'admin') {
+                return responseReturn(res, 403, { message: 'unauthorized' })
+            }
+
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                return responseReturn(res, 400, { message: 'All password fields are required' })
+            }
+
+            if (newPassword !== confirmPassword) {
+                return responseReturn(res, 400, { message: 'New password and confirm password do not match' })
+            }
+
+            if (!isStrongPassword(newPassword)) {
+                return responseReturn(res, 400, { message: getStrongPasswordMessage() })
+            }
+
+            const admin = await adminModel.findById(req.id).select('+password email name adminRole')
+            if (!admin) {
+                return responseReturn(res, 404, { message: 'Admin not found' })
+            }
+
+            const passwordMatches = await bcrpty.compare(currentPassword, admin.password)
+            if (!passwordMatches) {
+                return responseReturn(res, 400, { message: 'Current password is incorrect' })
+            }
+
+            const reusedPassword = await bcrpty.compare(newPassword, admin.password)
+            if (reusedPassword) {
+                return responseReturn(res, 400, { message: 'New password must be different from your current password' })
+            }
+
+            admin.password = await bcrpty.hash(newPassword, 10)
+            admin.passwordChangedAt = new Date()
+            await admin.save()
+
+            clearDashboardAccessCookie(res)
+            await sendSecurityEmail({
+                to: admin.email,
+                title: 'Your Password Was Changed',
+                intro: `Hello ${admin.name}, your admin account password was changed successfully.`,
+                req
+            })
+
+            return responseReturn(res, 200, { message: 'Password changed successfully. Please login again.' })
+        } catch (error) {
+            return responseReturn(res, 500, { message: 'Unable to change password' })
+        }
+    }
+
+    create_admin = async (req, res) => {
+        const { name, email, password, role } = req.body
+
+        try {
+            if (req.role !== 'admin') {
+                return responseReturn(res, 403, { message: 'unauthorized' })
+            }
+
+            if (req.adminRole !== 'super_admin') {
+                return responseReturn(res, 403, { message: 'Only super admin can create new admin accounts' })
+            }
+
+            const username = normalizeText(name)
+            const normalizedEmail = normalizeEmail(email)
+            const adminRole = role === 'super_admin' ? 'super_admin' : 'admin'
+
+            if (!username || !normalizedEmail || !password) {
+                return responseReturn(res, 400, { message: 'Username, email and password are required' })
+            }
+
+            if (!isStrongPassword(password)) {
+                return responseReturn(res, 400, { message: getStrongPasswordMessage() })
+            }
+
+            const existingAdminByEmail = await adminModel.findOne({ email: normalizedEmail })
+            if (existingAdminByEmail) {
+                return responseReturn(res, 409, { message: 'Email already exists' })
+            }
+
+            const existingAdminByName = await adminModel.findOne({
+                name: { $regex: new RegExp(`^${escapeRegex(username)}$`, 'i') }
+            })
+            if (existingAdminByName) {
+                return responseReturn(res, 409, { message: 'Username already exists' })
+            }
+
+            const admin = await adminModel.create({
+                name: username,
+                email: normalizedEmail,
+                password: await bcrpty.hash(password, 10),
+                image: 'admin.png',
+                role: 'admin',
+                adminRole
+            })
+
+            await sendSecurityEmail({
+                to: admin.email,
+                title: 'Admin Account Created',
+                intro: `Hello ${admin.name}, an admin account was created for you on MyHaat.`,
+                req
+            })
+
+            return responseReturn(res, 201, {
+                message: 'Admin created successfully',
+                admin: {
+                    _id: admin._id,
+                    name: admin.name,
+                    email: admin.email,
+                    adminRole
+                }
+            })
+        } catch (error) {
+            return responseReturn(res, 500, { message: 'Unable to create admin account' })
+        }
+    }
+
+    update_admin_username = async (req, res) => {
+        const username = normalizeText(req.body?.name)
+
+        try {
+            if (req.role !== 'admin') {
+                return responseReturn(res, 403, { message: 'unauthorized' })
+            }
+
+            if (!username) {
+                return responseReturn(res, 400, { message: 'Username is required' })
+            }
+
+            const duplicateAdmin = await adminModel.findOne({
+                _id: { $ne: req.id },
+                name: { $regex: new RegExp(`^${escapeRegex(username)}$`, 'i') }
+            })
+
+            if (duplicateAdmin) {
+                return responseReturn(res, 409, { message: 'Username already exists' })
+            }
+
+            const admin = await adminModel.findByIdAndUpdate(
+                req.id,
+                { name: username },
+                { new: true }
+            )
+
+            if (!admin) {
+                return responseReturn(res, 404, { message: 'Admin not found' })
+            }
+
+            const userInfo = admin.toObject()
+            userInfo.adminRole = getAdminPrivilegeRole(admin)
+
+            return responseReturn(res, 200, {
+                message: 'Username updated successfully',
+                userInfo
+            })
+        } catch (error) {
+            return responseReturn(res, 500, { message: 'Unable to update username' })
         }
     }
 

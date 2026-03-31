@@ -12,6 +12,14 @@ const jwt = require('jsonwebtoken')
 const sendMail = require('../../utiles/mailer')
 const emailVerificationTemplate = require('../../utiles/Template/emailVerification')
 const passwordResetTemplate = require('../../utiles/Template/passwordReset')
+const securityAlertTemplate = require('../../utiles/Template/securityAlert')
+const {
+    getClientDevice,
+    getClientIp,
+    getStrongPasswordMessage,
+    hasPasswordChangedAfter,
+    isStrongPassword
+} = require('../../utiles/authSecurity')
 
 const ACCESS_TOKEN_COOKIE = 'customerToken'
 const REFRESH_TOKEN_COOKIE = 'customerRefreshToken'
@@ -85,6 +93,24 @@ const clearCustomerCookies = (res) => {
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict'
     })
+}
+
+const sendCustomerPasswordChangedEmail = async (customer, req) => {
+    try {
+        await sendMail({
+            to: customer.email,
+            subject: 'Your Password Was Changed',
+            html: securityAlertTemplate({
+                title: 'Your Password Was Changed',
+                intro: `Hello ${customer.name}, your account password was changed successfully.`,
+                time: new Date().toISOString(),
+                ip: getClientIp(req),
+                device: getClientDevice(req)
+            })
+        })
+    } catch (error) {
+        console.log(error.message)
+    }
 }
 
 const getAccessTokenFromRequest = (req) => {
@@ -422,11 +448,23 @@ class customerAuthController {
                     _id: decoded.id,
                     refreshToken: hashToken(providedRefreshToken)
                 })
+                .select('+refreshToken passwordChangedAt')
 
             if (!customer) {
                 return responseReturn(res, 401, {
                     success: false,
                     message: 'Invalid refresh token'
+                })
+            }
+
+            if (hasPasswordChangedAfter(customer.passwordChangedAt, decoded.iat)) {
+                customer.refreshToken = null
+                await customer.save()
+                clearCustomerCookies(res)
+
+                return responseReturn(res, 401, {
+                    success: false,
+                    message: 'Session expired. Please login again.'
                 })
             }
 
@@ -497,6 +535,86 @@ class customerAuthController {
             return responseReturn(res, 500, {
                 success: false,
                 message: 'Unable to logout'
+            })
+        }
+    }
+
+    change_password = async (req, res) => {
+        const { currentPassword, newPassword, confirmPassword } = req.body
+
+        try {
+            if (req.role !== 'customer') {
+                return responseReturn(res, 403, {
+                    success: false,
+                    message: 'unauthorized'
+                })
+            }
+
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'All password fields are required'
+                })
+            }
+
+            if (newPassword !== confirmPassword) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'New password and confirm password do not match'
+                })
+            }
+
+            if (!isStrongPassword(newPassword)) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: getStrongPasswordMessage()
+                })
+            }
+
+            const customer = await customerModel
+                .findById(req.id)
+                .select('+password +refreshToken')
+
+            if (!customer) {
+                return responseReturn(res, 404, {
+                    success: false,
+                    message: 'User not found'
+                })
+            }
+
+            const passwordMatches = await bcrypt.compare(currentPassword, customer.password)
+            if (!passwordMatches) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'Current password is incorrect'
+                })
+            }
+
+            const reusedPassword = await bcrypt.compare(newPassword, customer.password)
+            if (reusedPassword) {
+                return responseReturn(res, 400, {
+                    success: false,
+                    message: 'New password must be different from your current password'
+                })
+            }
+
+            customer.password = await bcrypt.hash(newPassword, 10)
+            customer.refreshToken = null
+            customer.passwordChangedAt = new Date()
+            await customer.save()
+
+            clearCustomerCookies(res)
+            await sendCustomerPasswordChangedEmail(customer, req)
+
+            return responseReturn(res, 200, {
+                success: true,
+                message: 'Password changed successfully. Please login again.'
+            })
+        } catch (error) {
+            console.log(error.message)
+            return responseReturn(res, 500, {
+                success: false,
+                message: 'Unable to change password'
             })
         }
     }

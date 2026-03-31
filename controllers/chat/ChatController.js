@@ -378,6 +378,8 @@ const sellerModel = require('../../models/sellerModel')
 const customerModel = require('../../models/customerModel')
 const { responseReturn } = require('../../utiles/response')
 
+const ADMIN_ROLES = ['admin', 'super_admin']
+
 class chatController {
 
     send_message = async (req, res) => {
@@ -409,21 +411,24 @@ class chatController {
     }
     get_admin_conversations = async (req, res) => {
         try {
-            const adminId = req.id
+            if (req.role !== 'admin') {
+                return responseReturn(res, 403, { error: 'unauthorized' })
+            }
+
             const messages = await adminMessage.find({
                 $or: [
-                    { senderId: adminId },
-                    { receiverId: adminId }
+                    { senderRole: { $in: ADMIN_ROLES } },
+                    { receiverRole: { $in: ADMIN_ROLES } }
                 ]
-            })
+            }).sort({ createdAt: -1 })
 
             const usersMap = {}
 
             messages.forEach(m => {
-                if (m.senderId !== adminId) {
+                if (!ADMIN_ROLES.includes(m.senderRole)) {
                     usersMap[m.senderId] = m.senderRole
                 }
-                if (m.receiverId !== adminId) {
+                if (!ADMIN_ROLES.includes(m.receiverRole)) {
                     usersMap[m.receiverId] = m.receiverRole
                 }
             })
@@ -438,7 +443,7 @@ class chatController {
                         users.push({
                             id,
                             role: "seller",
-                            name: seller.shopInfo?.shopName,
+                            name: seller.shopInfo?.shopName || seller.name || seller.email,
                             image: seller.image
                         })
                     }
@@ -469,12 +474,27 @@ class chatController {
         const { userId, userRole } = req.params
 
         try {
-            const messages = await adminMessage.find({
+            if (req.role !== 'admin' && req.id !== userId) {
+                return responseReturn(res, 403, { error: 'unauthorized' })
+            }
+
+            let query = {
                 $or: [
                     { senderId: userId, senderRole: userRole },
                     { receiverId: userId, receiverRole: userRole }
                 ]
-            }).sort({ createdAt: 1 })
+            }
+
+            if (req.role === 'admin' && userRole === 'admin') {
+                query = {
+                    $or: [
+                        { senderRole: { $in: ADMIN_ROLES } },
+                        { receiverRole: { $in: ADMIN_ROLES } }
+                    ]
+                }
+            }
+
+            const messages = await adminMessage.find(query).sort({ createdAt: 1 })
 
             responseReturn(res, 200, { messages })
 

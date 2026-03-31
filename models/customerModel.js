@@ -43,6 +43,10 @@ const customerSchema = new Schema({
         type: String,
         select: false
     },
+    passwordChangedAt: {
+        type: Date,
+        default: null
+    },
     method: {
         type: String,
         required: true,
