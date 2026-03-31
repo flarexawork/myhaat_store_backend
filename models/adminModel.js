@@ -21,6 +21,14 @@ const adminSchema = new Schema({
     role: {
         type: String,
         default: 'admin'
+    },
+    adminRole: {
+        type: String,
+        default: 'admin'
+    },
+    passwordChangedAt: {
+        type: Date,
+        default: null
     }
 })
 

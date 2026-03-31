@@ -21,6 +21,10 @@ const sellerSchema = new Schema({
         required: true,
         select: false
     },
+    passwordChangedAt: {
+        type: Date,
+        default: null
+    },
     isEmailVerified: {
         type: Boolean,
         default: false
