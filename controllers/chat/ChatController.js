@@ -439,11 +439,17 @@ class chatController {
 
                 if (usersMap[id] === "seller") {
                     const seller = await sellerModel.findById(id)
+
+                    
                     if (seller) {
                         users.push({
                             id,
                             role: "seller",
-                            name: seller.shopInfo?.shopName || seller.name || seller.email,
+                            name:
+                                seller.shopDetails?.shopName ||
+                                seller.shopInfo?.shopName ||
+                                seller.name ||
+                                seller.email,
                             image: seller.image
                         })
                     }
