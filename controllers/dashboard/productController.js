@@ -21,11 +21,11 @@ class productController {
 
 
             cloudinary.config({
-                CLOUD_NAME: process.env.CLOUD_NAME,
-                API_KEY: process.env.API_KEY,
-                API_SECRET: process.env.API_SECRET,
-                secure: true
-            })
+            cloud_name: process.env.CLOUD_NAME,
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET,
+            secure: true
+        })
 
             try {
                 let allImageUrl = [];
@@ -72,12 +72,12 @@ class productController {
             }
 
             // cloudinary config
-            cloudinary.config({
-                CLOUD_NAME: process.env.CLOUD_NAME,
-                API_KEY: process.env.API_KEY,
-                API_SECRET: process.env.API_SECRET,
-                secure: true
-            });
+           cloudinary.config({
+            cloud_name: process.env.CLOUD_NAME,
+            api_key: process.env.API_KEY,
+            api_secret: process.env.API_SECRET,
+            secure: true
+        })
 
             // delete images from cloudinary
             for (let img of product.images) {
