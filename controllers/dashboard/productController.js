@@ -14,11 +14,19 @@ class productController {
 
         form.parse(req, async (err, field, files) => {
             let { name, category, description, stock, price, discount, shopName, brand } = field;
-            const { images } = files;
+            let { images } = files;
             name = name.trim()
             name = name.replace(/[^a-zA-Z0-9\s-]/g, '')
             const slug = name.split(' ').join('-')
 
+            // Normalize: formidable returns a single File object (not array) for 1 file
+            if (images && !Array.isArray(images)) {
+                images = [images]
+            }
+
+            if (!images || images.length === 0) {
+                return responseReturn(res, 400, { error: 'At least 1 product image is required' })
+            }
 
             cloudinary.config({
             cloud_name: process.env.CLOUD_NAME,
@@ -189,9 +197,9 @@ class productController {
                     }
 
                     cloudinary.config({
-                        CLOUD_NAME: process.env.CLOUD_NAME,
-                        API_KEY: process.env.API_KEY,
-                        API_SECRET: process.env.API_SECRET,
+                        cloud_name: process.env.CLOUD_NAME,
+                        api_key: process.env.API_KEY,
+                        api_secret: process.env.API_SECRET,
                         secure: true
                     })
                     const result = await cloudinary.uploader.upload(newImage.filepath, { folder: 'products' })
@@ -208,8 +216,8 @@ class productController {
                             images
                         })
 
-                        const product = await productModel.findById(productId)
-                        responseReturn(res, 200, { product, message: 'product image update success' })
+                        const updatedProduct = await productModel.findById(productId)
+                        responseReturn(res, 200, { product: updatedProduct, message: 'product image update success' })
                     } else {
                         responseReturn(res, 404, { error: 'image upload failed' })
                     }

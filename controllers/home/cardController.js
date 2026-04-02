@@ -10,6 +10,7 @@ const {
     }
 } = require('mongoose')
 const { getActiveSellers } = require('../../utiles/activeSellerFilter')
+const { getOrderShippingFee } = require('../../utiles/shippingConfig')
 class cardController {
     add_to_card = async (req, res) => {
         const {
@@ -139,11 +140,12 @@ class cardController {
 
                 }
             }
+            const shipping_fee = await getOrderShippingFee(p.length)
             responseReturn(res, 200, {
                 card_products: p,
                 price: calculatePrice,
                 card_product_count,
-                shipping_fee: 85 * p.length,
+                shipping_fee,
                 outOfStockProduct,
                 buy_product_item
             })
