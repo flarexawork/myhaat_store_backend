@@ -51,6 +51,18 @@ const authorSchema = new Schema({
         enum: ['PENDING', 'ACCEPT', 'REJECT'],
         default: 'PENDING'
     },
+    commission_percent: {
+        type: Number,
+        default: 0
+    },
+    commission_amount: {
+        type: Number,
+        default: 0
+    },
+    seller_earning: {
+        type: Number,
+        default: 0
+    },
     date: {
         type: String,
         required: true

@@ -78,7 +78,22 @@ const customerOrderSchema = new Schema({
 
     commission_percent: {
         type: Number,
-        default: 10
+        default: 0
+    },
+
+    commission_amount: {
+        type: Number,
+        default: 0
+    },
+
+    seller_earning: {
+        type: Number,
+        default: 0
+    },
+
+    product_total: {
+        type: Number,
+        default: 0
     },
 
 date: {

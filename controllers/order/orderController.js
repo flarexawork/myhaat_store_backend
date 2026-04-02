@@ -13,6 +13,8 @@ const {
 
 const { mongo: { ObjectId } } = require('mongoose')
 const { responseReturn } = require('../../utiles/response')
+const { getCommissionSettings, getCommissionPercent } = require('../../utiles/commissionConfig')
+const { getOrderShippingFee } = require('../../utiles/shippingConfig')
 const moment = require('moment')
 const crypto = require('crypto')
 const Razorpay = require('razorpay')
@@ -92,7 +94,6 @@ class orderController {
             const {
                 price,
                 products,
-                shipping_fee,
                 shippingInfo,
                 userId,
                 payment_type
@@ -106,20 +107,26 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Invalid order data' })
             }
 
-            const tempDate = new Date(); 
-            const formattedDate = tempDate.toLocaleString('en-IN', {
-                timeZone: 'Asia/Kolkata',
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
+            const normalizedPrice = Number(price)
+
+            if (!Number.isFinite(normalizedPrice) || normalizedPrice < 0) {
+                return responseReturn(res, 400, { message: 'Invalid order amount' })
+            }
+
+            const tempDate = new Date();
+            const resolvedShippingFee = await getOrderShippingFee(products.length)
+            const orderTotal = normalizedPrice + resolvedShippingFee
+
+            /* -------- FETCH COMMISSION SETTINGS -------- */
+
+            const commissionSettings = await getCommissionSettings()
+            const commissionPercent = commissionSettings.commission_percent || 0
 
             let authorOrderData = []
             let cardId = []
             let customerOrderProduct = []
+            let totalCommissionAmount = 0
+            let totalSellerEarning = 0
 
             /* -------- BUILD CUSTOMER PRODUCT LIST -------- */
 
@@ -144,7 +151,11 @@ class orderController {
                 customerId: userId,
                 shippingInfo: { ...shippingInfo },
                 products: customerOrderProduct,
-                price: price + shipping_fee,
+                price: orderTotal,
+                product_total: normalizedPrice,
+                commission_percent: commissionPercent,
+                commission_amount: commissionPercent > 0 ? Math.round(normalizedPrice * commissionPercent / 100) : 0,
+                seller_earning: commissionPercent > 0 ? normalizedPrice - Math.round(normalizedPrice * commissionPercent / 100) : normalizedPrice,
                 payment_type,
                 payment_status: payment_type === 'cod' ? 'cod' : 'pending',
                 delivery_status: 'PENDING',
@@ -157,8 +168,16 @@ class orderController {
             for (let i = 0; i < products.length; i++) {
 
                 const pro = products[i].products
-                const pri = products[i].price
+                const pri = Number(products[i].price) || 0
                 const sellerId = products[i].sellerId
+
+                const sellerCommission = commissionPercent > 0
+                    ? Math.round(pri * commissionPercent / 100)
+                    : 0
+                const sellerEarning = pri - sellerCommission
+
+                totalCommissionAmount += sellerCommission
+                totalSellerEarning += sellerEarning
 
                 let storePro = []
 
@@ -174,6 +193,9 @@ class orderController {
                     sellerId,
                     products: storePro,
                     price: pri,
+                    commission_percent: commissionPercent,
+                    commission_amount: sellerCommission,
+                    seller_earning: sellerEarning,
                     payment_type,
                     payment_status: payment_type === 'cod' ? 'cod' : 'pending',
                     shippingInfo: { ...shippingInfo },
@@ -198,7 +220,7 @@ class orderController {
                 try {
 
                     const razorpayOrder = await razorpay.orders.create({
-                        amount: (price + shipping_fee) * 100,
+                        amount: Math.round(orderTotal * 100),
                         currency: "INR",
                         receipt: order._id.toString(),
                         notes: { orderId: order._id.toString() }
@@ -828,14 +850,18 @@ class orderController {
 
                 for (let i = 0; i < sellerOrders.length; i++) {
 
-                    const commissionPercent = 10
+                    // Use commission stored at order time; fallback to DB for old orders
+                    let commissionPercent = sellerOrders[i].commission_percent
+                    if (commissionPercent === undefined || commissionPercent === null) {
+                        commissionPercent = await getCommissionPercent()
+                    }
 
                     const sellerAmount =
                         sellerOrders[i].price -
-                        (sellerOrders[i].price * commissionPercent / 100)
+                        Math.round(sellerOrders[i].price * commissionPercent / 100)
 
                     const platformCommission =
-                        sellerOrders[i].price * commissionPercent / 100
+                        Math.round(sellerOrders[i].price * commissionPercent / 100)
 
                     await sellerWallet.create({
                         sellerId: sellerOrders[i].sellerId.toString(),
