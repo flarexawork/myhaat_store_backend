@@ -7,6 +7,7 @@ const cookieParser = require('cookie-parser')
 require('dotenv').config()
 
 const { dbConnect } = require('./utiles/db')
+const { startAutoCancelWorker } = require('./services/order/orderAutoCancelService')
 const socket = require('socket.io')
 
 const app = express()
@@ -355,4 +356,5 @@ app.use((err, req, res, next) => {
 })
 
 dbConnect()
+startAutoCancelWorker()
 server.listen(port, () => console.log(`Server is running on port ${port}!`))

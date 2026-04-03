@@ -3,6 +3,10 @@ const customerOrder = require('../../models/customerOrder')
 const cardModel = require('../../models/cardModel')
 const myShopWallet = require('../../models/myShopWallet')
 const sellerWallet = require('../../models/sellerWallet')
+const {
+    cancelExpiredOrderById,
+    reconcileOrdersAutoCancellation
+} = require('../../services/order/orderAutoCancelService')
 const orderStatusService = require('../../services/order/orderStatusService')
 const {
     normalizeDeliveryStatus,
@@ -60,34 +64,24 @@ class orderController {
         await customerOrder.findByIdAndUpdate(parentOrderId, updateData)
     }
 
+    load_customer_order = async (orderId, options = {}) => {
+        const referenceTime = options.referenceTime || new Date()
 
-    /* ================================================= */
-    /* AUTO CANCEL ONLINE UNPAID (15 MIN)               */
-    /* ================================================= */
-    paymentCheck = async (id) => {
-        try {
-            const order = await customerOrder.findById(id)
+        await cancelExpiredOrderById(orderId, referenceTime)
 
-            if (!order) return
+        return customerOrder.findById(orderId)
+    }
 
-            const isOnline = order.payment_type === 'online'
-            const isPending = order.payment_status === 'pending'
-            const isFailed = order.payment_status === 'failed'
+    reconcile_customer_orders = async (orders = [], options = {}) => {
+        const referenceTime = options.referenceTime || new Date()
+        const cancelledCount = await reconcileOrdersAutoCancellation(
+            orders,
+            referenceTime
+        )
 
-            if (isOnline && (isPending || isFailed)) {
-
-                await customerOrder.findByIdAndUpdate(id, {
-                    delivery_status: 'cancelled'
-                })
-
-                await authOrderModel.updateMany(
-                    { orderId: id },
-                    { delivery_status: 'cancelled' }
-                )
-            }
-
-        } catch (error) {
-            console.log("paymentCheck error:", error)
+        return {
+            referenceTime,
+            cancelledCount
         }
     }
 
@@ -283,10 +277,6 @@ class orderController {
                         razorpay_order_id: razorpayOrder.id
                     })
 
-                    setTimeout(() => {
-                        this.paymentCheck(order._id)
-                    }, 15 * 60 * 1000)
-
                     return responseReturn(res, 201, {
                         orderId: order._id,
                         razorpayOrder
@@ -295,8 +285,17 @@ class orderController {
                 } catch (razorError) {
 
                     await customerOrder.findByIdAndUpdate(order._id, {
+                        order_status: 'REJECT',
                         delivery_status: 'cancelled'
                     })
+
+                    await authOrderModel.updateMany(
+                        { orderId: order._id },
+                        {
+                            order_status: 'REJECT',
+                            delivery_status: 'cancelled'
+                        }
+                    )
 
                     return responseReturn(res, 500, {
                         message: 'Payment gateway error'
@@ -342,10 +341,18 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Valid orderId required' })
             }
 
-            const order = await customerOrder.findById(orderId)
+            const order = await this.load_customer_order(orderId)
 
             if (!order) {
                 return responseReturn(res, 404, { message: 'Order not found' })
+            }
+
+            if (order.payment_type !== 'online') {
+                return responseReturn(res, 400, { message: 'This order is not eligible for online payment' })
+            }
+
+            if (normalizeOrderStatus(order.order_status) === 'REJECT' || normalizeDeliveryStatus(order.delivery_status) === 'cancelled') {
+                return responseReturn(res, 400, { message: 'Order already cancelled' })
             }
 
             if (order.payment_status === 'paid') {
@@ -410,7 +417,7 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Invalid Razorpay signature' })
             }
 
-            const order = await customerOrder.findById(orderId)
+            const order = await this.load_customer_order(orderId)
 
             if (!order) {
                 return responseReturn(res, 404, { message: 'Order not found' })
@@ -418,6 +425,10 @@ class orderController {
 
             if (order.payment_type !== 'online' && order.payment_type !== 'cod') {
                 return responseReturn(res, 400, { message: 'This order payment type is not supported' })
+            }
+
+            if (normalizeOrderStatus(order.order_status) === 'REJECT' || normalizeDeliveryStatus(order.delivery_status) === 'cancelled') {
+                return responseReturn(res, 400, { message: 'Order already cancelled' })
             }
 
             if (order.razorpay_order_id !== razorpay_order_id) {
@@ -446,7 +457,7 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Valid orderId required' })
             }
 
-            const order = await customerOrder.findById(orderId)
+            const order = await this.load_customer_order(orderId)
 
             if (!order) {
                 return responseReturn(res, 404, { message: 'Order not found' })
@@ -454,6 +465,10 @@ class orderController {
 
             if (order.payment_type !== 'cod') {
                 return responseReturn(res, 400, { message: 'This order is not COD type' })
+            }
+
+            if (normalizeOrderStatus(order.order_status) === 'REJECT' || normalizeDeliveryStatus(order.delivery_status) === 'cancelled') {
+                return responseReturn(res, 400, { message: 'Order already cancelled' })
             }
 
             await this.update_order_payment_status(orderId, 'cod')
@@ -523,6 +538,13 @@ class orderController {
                     return res.status(200).json({ message: "Already processed" })
                 }
 
+                if (
+                    normalizeOrderStatus(existingOrder.order_status) === 'REJECT' ||
+                    normalizeDeliveryStatus(existingOrder.delivery_status) === 'cancelled'
+                ) {
+                    return res.status(409).json({ message: 'Order already cancelled' })
+                }
+
                 await this.update_order_payment_status(
                     existingOrder._id.toString(),
                     "paid",
@@ -574,11 +596,21 @@ class orderController {
 
         try {
 
-            const recentOrders = await customerOrder
+            let recentOrders = await customerOrder
                 .find({ customerId: new ObjectId(userId) })
                 .sort({ createdAt: -1 })
                 .limit(5)
 
+            const recentOrderReconciliation = await this.reconcile_customer_orders(recentOrders)
+
+            if (recentOrderReconciliation.cancelledCount) {
+                recentOrders = await customerOrder
+                    .find({ customerId: new ObjectId(userId) })
+                    .sort({ createdAt: -1 })
+                    .limit(5)
+            }
+
+            const responseTime = new Date()
             const pendingOrder = await customerOrder.countDocuments({
                 customerId: new ObjectId(userId),
                 delivery_status: { $in: ['PENDING', 'pending'] }
@@ -594,7 +626,8 @@ class orderController {
             })
 
             responseReturn(res, 200, {
-                recentOrders: recentOrders.map((order) => enrichCustomerOrder(order)),
+                serverTime: responseTime.toISOString(),
+                recentOrders: recentOrders.map((order) => enrichCustomerOrder(order, { referenceTime: responseTime })),
                 pendingOrder,
                 cancelledOrder,
                 totalOrder
@@ -614,24 +647,29 @@ class orderController {
 
         try {
 
-            let orders
+            const query = {
+                customerId: new ObjectId(customerId)
+            }
 
             if (status !== 'all') {
                 const normalizedStatus = normalizeDeliveryStatus(status)
-                const statusFilter = [status, normalizedStatus].filter(Boolean)
-
-                orders = await customerOrder.find({
-                    customerId: new ObjectId(customerId),
-                    delivery_status: { $in: statusFilter }
-                }).sort({ createdAt: -1 })
-            } else {
-                orders = await customerOrder.find({
-                    customerId: new ObjectId(customerId)
-                }).sort({ createdAt: -1 })
+                query.delivery_status = {
+                    $in: [status, normalizedStatus].filter(Boolean)
+                }
             }
 
+            let orders = await customerOrder.find(query).sort({ createdAt: -1 })
+            const orderReconciliation = await this.reconcile_customer_orders(orders)
+
+            if (orderReconciliation.cancelledCount) {
+                orders = await customerOrder.find(query).sort({ createdAt: -1 })
+            }
+
+            const responseTime = new Date()
+
             responseReturn(res, 200, {
-                orders: orders.map((order) => enrichCustomerOrder(order))
+                serverTime: responseTime.toISOString(),
+                orders: orders.map((order) => enrichCustomerOrder(order, { referenceTime: responseTime }))
             })
 
         } catch (error) {
@@ -647,9 +685,11 @@ class orderController {
             if (!orderId || !ObjectId.isValid(orderId)) {
                 return responseReturn(res, 400, { message: 'Valid orderId required' })
             }
-            const order = await customerOrder.findById(orderId)
+            const order = await this.load_customer_order(orderId)
+            const responseTime = new Date()
             responseReturn(res, 200, {
-                order: order ? enrichCustomerOrder(order) : null
+                serverTime: responseTime.toISOString(),
+                order: order ? enrichCustomerOrder(order, { referenceTime: responseTime }) : null
             })
         } catch (error) {
             console.log(error)
@@ -669,7 +709,7 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Valid customerId required' })
             }
 
-            const order = await customerOrder.findById(orderId)
+            const order = await this.load_customer_order(orderId)
 
             if (!order) {
                 return responseReturn(res, 404, { message: 'Order not found' })

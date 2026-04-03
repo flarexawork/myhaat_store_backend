@@ -1,3 +1,9 @@
+const { getOrderAutoCancelState } = require('../services/order/orderAutoCancelService')
+const {
+    normalizeDeliveryStatus,
+    normalizeOrderStatus
+} = require('../validations/orderStatusValidation')
+
 const hasValue = (value) => value !== undefined && value !== null
 
 const toPlainObject = (value = {}) => {
@@ -114,10 +120,10 @@ const normalizePaymentType = (order = {}) => {
 }
 
 const isCancelledOrRejected = (order = {}) => {
-    const deliveryStatus = String(order?.delivery_status || '').trim().toLowerCase()
-    const orderStatus = String(order?.order_status || '').trim().toUpperCase()
+    const deliveryStatus = normalizeDeliveryStatus(order?.delivery_status || '')
+    const orderStatus = normalizeOrderStatus(order?.order_status || '')
 
-    return deliveryStatus === 'cancelled' || deliveryStatus === 'delivery_rejected' || orderStatus === 'REJECT'
+    return deliveryStatus === 'cancelled' || deliveryStatus === 'DELIVERY_REJECTED' || orderStatus === 'REJECT'
 }
 
 const calculateCheckoutOrderSummary = ({
@@ -266,6 +272,7 @@ const calculateSellerOrderSummary = (order = {}, options = {}) => {
 const enrichCustomerOrder = (order = {}, options = {}) => {
     const plainOrder = toPlainObject(order)
     const financials = calculateOrderSummary(plainOrder, options)
+    const auto_cancel = getOrderAutoCancelState(plainOrder, options?.referenceTime)
 
     return {
         ...plainOrder,
@@ -279,13 +286,15 @@ const enrichCustomerOrder = (order = {}, options = {}) => {
         final_total: financials.final_total,
         admin_earning: financials.admin_earning,
         payment_type: financials.payment_type,
-        financials
+        financials,
+        auto_cancel
     }
 }
 
 const enrichSellerOrder = (order = {}, options = {}) => {
     const plainOrder = toPlainObject(order)
     const financials = calculateSellerOrderSummary(plainOrder, options)
+    const auto_cancel = getOrderAutoCancelState(plainOrder, options?.referenceTime)
 
     return {
         ...plainOrder,
@@ -300,7 +309,8 @@ const enrichSellerOrder = (order = {}, options = {}) => {
         final_total: financials.final_total,
         admin_earning: financials.admin_earning,
         payment_type: financials.payment_type,
-        financials
+        financials,
+        auto_cancel
     }
 }
 
