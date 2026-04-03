@@ -13,8 +13,15 @@ const {
 
 const { mongo: { ObjectId } } = require('mongoose')
 const { responseReturn } = require('../../utiles/response')
-const { getCommissionSettings, getCommissionPercent } = require('../../utiles/commissionConfig')
+const { getCommissionSettings } = require('../../utiles/commissionConfig')
 const { getOrderShippingFee } = require('../../utiles/shippingConfig')
+const {
+    calculateCheckoutOrderSummary,
+    calculateSellerOrderSummary,
+    enrichCustomerOrder,
+    enrichSellerOrder,
+    enrichCustomerOrderWithSuborders
+} = require('../../utiles/orderFinancials')
 const moment = require('moment')
 const crypto = require('crypto')
 const Razorpay = require('razorpay')
@@ -107,26 +114,66 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Invalid order data' })
             }
 
-            const normalizedPrice = Number(price)
-
-            if (!Number.isFinite(normalizedPrice) || normalizedPrice < 0) {
-                return responseReturn(res, 400, { message: 'Invalid order amount' })
-            }
-
-            const tempDate = new Date();
+            const requestedProductTotal = Number(price)
+            const requestedShippingFee = Number(req.body?.shipping_fee)
+            const tempDate = new Date()
             const resolvedShippingFee = await getOrderShippingFee(products.length)
-            const orderTotal = normalizedPrice + resolvedShippingFee
 
             /* -------- FETCH COMMISSION SETTINGS -------- */
 
             const commissionSettings = await getCommissionSettings()
             const commissionPercent = commissionSettings.commission_percent || 0
 
+            // IMPORTANT:
+            // product_total = only product value
+            // shipping_fee = separate from product_total
+            // commission applies only on product_total
+            // DO NOT recompute these values differently in other layers.
+            const checkoutSummary = calculateCheckoutOrderSummary({
+                sellerGroups: products,
+                commissionPercent,
+                shippingFeePerGroup: products.length > 0 ? resolvedShippingFee / products.length : 0
+            })
+
+            if (!checkoutSummary.seller_summaries.length) {
+                return responseReturn(res, 400, { message: 'Invalid order amount' })
+            }
+
+            if (checkoutSummary.product_total < 0 || checkoutSummary.final_total < 0) {
+                return responseReturn(res, 400, { message: 'Invalid order amount' })
+            }
+
+            const shouldTraceFinancials = String(process.env.ORDER_DEBUG_TRACE || '').trim().toLowerCase() === 'true'
+            const productTotalMismatch = Number.isFinite(requestedProductTotal) && requestedProductTotal !== checkoutSummary.product_total
+            const shippingMismatch = Number.isFinite(requestedShippingFee) && requestedShippingFee !== checkoutSummary.shipping_fee
+
+            if (shouldTraceFinancials || productTotalMismatch || shippingMismatch) {
+                console.log('ORDER_FINANCIAL_TRACE', {
+                    requested_product_total: requestedProductTotal,
+                    requested_shipping_fee: requestedShippingFee,
+                    computed_subtotal: checkoutSummary.subtotal,
+                    computed_discount: checkoutSummary.discount,
+                    computed_product_total: checkoutSummary.product_total,
+                    computed_shipping_fee: checkoutSummary.shipping_fee,
+                    computed_final_total: checkoutSummary.final_total,
+                    commission_percent: checkoutSummary.commission_percent,
+                    commission_amount: checkoutSummary.commission_amount,
+                    seller_earning: checkoutSummary.seller_earning,
+                    admin_earning: checkoutSummary.admin_earning,
+                    payment_type,
+                    seller_groups: checkoutSummary.seller_summaries.map((item) => ({
+                        sellerId: item.sellerId,
+                        product_total: item.product_total,
+                        shipping_fee: item.shipping_fee,
+                        commission_amount: item.commission_amount,
+                        seller_earning: item.seller_earning
+                    }))
+                })
+            }
+
             let authorOrderData = []
             let cardId = []
             let customerOrderProduct = []
-            let totalCommissionAmount = 0
-            let totalSellerEarning = 0
 
             /* -------- BUILD CUSTOMER PRODUCT LIST -------- */
 
@@ -151,11 +198,12 @@ class orderController {
                 customerId: userId,
                 shippingInfo: { ...shippingInfo },
                 products: customerOrderProduct,
-                price: orderTotal,
-                product_total: normalizedPrice,
-                commission_percent: commissionPercent,
-                commission_amount: commissionPercent > 0 ? Math.round(normalizedPrice * commissionPercent / 100) : 0,
-                seller_earning: commissionPercent > 0 ? normalizedPrice - Math.round(normalizedPrice * commissionPercent / 100) : normalizedPrice,
+                price: checkoutSummary.final_total,
+                shipping_fee: checkoutSummary.shipping_fee,
+                product_total: checkoutSummary.product_total,
+                commission_percent: checkoutSummary.commission_percent,
+                commission_amount: checkoutSummary.commission_amount,
+                seller_earning: checkoutSummary.seller_earning,
                 payment_type,
                 payment_status: payment_type === 'cod' ? 'cod' : 'pending',
                 delivery_status: 'PENDING',
@@ -167,17 +215,17 @@ class orderController {
 
             for (let i = 0; i < products.length; i++) {
 
-                const pro = products[i].products
-                const pri = Number(products[i].price) || 0
-                const sellerId = products[i].sellerId
-
-                const sellerCommission = commissionPercent > 0
-                    ? Math.round(pri * commissionPercent / 100)
-                    : 0
-                const sellerEarning = pri - sellerCommission
-
-                totalCommissionAmount += sellerCommission
-                totalSellerEarning += sellerEarning
+                const sellerSummary = checkoutSummary.seller_summaries[i] || {
+                    sellerId: products[i].sellerId,
+                    products: products[i].products,
+                    product_total: Number(products[i].price) || 0,
+                    shipping_fee: 0,
+                    commission_percent: checkoutSummary.commission_percent,
+                    commission_amount: 0,
+                    seller_earning: Number(products[i].price) || 0
+                }
+                const pro = sellerSummary.products || products[i].products
+                const sellerId = sellerSummary.sellerId || products[i].sellerId
 
                 let storePro = []
 
@@ -188,14 +236,19 @@ class orderController {
                     })
                 }
 
+                // IMPORTANT:
+                // Seller order price must stay as pure product_total only.
+                // Do NOT subtract discount or commission here.
+                // Commission is already computed in the shared financial summary.
                 authorOrderData.push({
                     orderId: order._id,
                     sellerId,
                     products: storePro,
-                    price: pri,
-                    commission_percent: commissionPercent,
-                    commission_amount: sellerCommission,
-                    seller_earning: sellerEarning,
+                    price: sellerSummary.product_total,
+                    shipping_fee: sellerSummary.shipping_fee,
+                    commission_percent: sellerSummary.commission_percent,
+                    commission_amount: sellerSummary.commission_amount,
+                    seller_earning: sellerSummary.seller_earning,
                     payment_type,
                     payment_status: payment_type === 'cod' ? 'cod' : 'pending',
                     shippingInfo: { ...shippingInfo },
@@ -220,7 +273,7 @@ class orderController {
                 try {
 
                     const razorpayOrder = await razorpay.orders.create({
-                        amount: Math.round(orderTotal * 100),
+                        amount: Math.round(checkoutSummary.final_total * 100),
                         currency: "INR",
                         receipt: order._id.toString(),
                         notes: { orderId: order._id.toString() }
@@ -541,7 +594,7 @@ class orderController {
             })
 
             responseReturn(res, 200, {
-                recentOrders,
+                recentOrders: recentOrders.map((order) => enrichCustomerOrder(order)),
                 pendingOrder,
                 cancelledOrder,
                 totalOrder
@@ -577,7 +630,9 @@ class orderController {
                 }).sort({ createdAt: -1 })
             }
 
-            responseReturn(res, 200, { orders })
+            responseReturn(res, 200, {
+                orders: orders.map((order) => enrichCustomerOrder(order))
+            })
 
         } catch (error) {
             console.log(error)
@@ -593,7 +648,9 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Valid orderId required' })
             }
             const order = await customerOrder.findById(orderId)
-            responseReturn(res, 200, { order })
+            responseReturn(res, 200, {
+                order: order ? enrichCustomerOrder(order) : null
+            })
         } catch (error) {
             console.log(error)
         }
@@ -723,7 +780,10 @@ class orderController {
                 ? await customerOrder.countDocuments(matchStage)
                 : await customerOrder.countDocuments()
 
-            responseReturn(res, 200, { orders, totalOrder })
+            responseReturn(res, 200, {
+                orders: orders.map((order) => enrichCustomerOrderWithSuborders(order)),
+                totalOrder
+            })
 
         } catch (error) {
             console.log(error)
@@ -751,7 +811,9 @@ class orderController {
                 }
             ])
 
-            responseReturn(res, 200, { order: order[0] })
+            responseReturn(res, 200, {
+                order: order[0] ? enrichCustomerOrderWithSuborders(order[0]) : null
+            })
 
         } catch (error) {
             console.log(error)
@@ -849,19 +911,9 @@ class orderController {
                 const splitTime = time.split('/')
 
                 for (let i = 0; i < sellerOrders.length; i++) {
-
-                    // Use commission stored at order time; fallback to DB for old orders
-                    let commissionPercent = sellerOrders[i].commission_percent
-                    if (commissionPercent === undefined || commissionPercent === null) {
-                        commissionPercent = await getCommissionPercent()
-                    }
-
-                    const sellerAmount =
-                        sellerOrders[i].price -
-                        Math.round(sellerOrders[i].price * commissionPercent / 100)
-
-                    const platformCommission =
-                        Math.round(sellerOrders[i].price * commissionPercent / 100)
+                    const sellerFinancials = calculateSellerOrderSummary(sellerOrders[i])
+                    const sellerAmount = sellerFinancials.seller_earning
+                    const platformCommission = sellerFinancials.admin_earning
 
                     await sellerWallet.create({
                         sellerId: sellerOrders[i].sellerId.toString(),
@@ -914,7 +966,10 @@ class orderController {
 
             const totalOrder = await authOrderModel.countDocuments({ sellerId })
 
-            responseReturn(res, 200, { orders, totalOrder })
+            responseReturn(res, 200, {
+                orders: orders.map((order) => enrichSellerOrder(order)),
+                totalOrder
+            })
 
         } catch (error) {
             console.log(error)
@@ -930,7 +985,9 @@ class orderController {
                 return responseReturn(res, 400, { message: 'Valid orderId required' })
             }
             const order = await authOrderModel.findById(orderId)
-            responseReturn(res, 200, { order })
+            responseReturn(res, 200, {
+                order: order ? enrichSellerOrder(order) : null
+            })
         } catch (error) {
             console.log(error)
         }
