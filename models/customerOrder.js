@@ -18,6 +18,11 @@ const customerOrderSchema = new Schema({
         required: true
     },
 
+    shipping_fee: {
+        type: Number,
+        default: 0
+    },
+
     shippingInfo: {
         type: Object,
         required: true

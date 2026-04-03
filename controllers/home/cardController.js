@@ -11,6 +11,7 @@ const {
 } = require('mongoose')
 const { getActiveSellers } = require('../../utiles/activeSellerFilter')
 const { getOrderShippingFee } = require('../../utiles/shippingConfig')
+const { getDiscountedUnitPrice } = require('../../utiles/orderFinancials')
 class cardController {
     add_to_card = async (req, res) => {
         const {
@@ -52,7 +53,6 @@ class cardController {
         }
     }
     get_card_products = async (req, res) => {
-        const co = 5;
         const {
             userId
         } = req.params
@@ -93,15 +93,8 @@ class cardController {
                 } = stockProduct[i]
                 card_product_count = card_product_count + quantity
                 buy_product_item = buy_product_item + quantity
-                const {
-                    price,
-                    discount
-                } = stockProduct[i].products[0]
-                if (discount !== 0) {
-                    calculatePrice = calculatePrice + quantity * (price - Math.floor((price * discount) / 100))
-                } else {
-                    calculatePrice = calculatePrice + quantity * price
-                }
+                const discountedPrice = getDiscountedUnitPrice(stockProduct[i].products[0])
+                calculatePrice = calculatePrice + quantity * discountedPrice
             }
             let p = []
             let unique = [...new Set(stockProduct.map(p => p.products[0].sellerId.toString()))]
@@ -110,13 +103,7 @@ class cardController {
                 for (let j = 0; j < stockProduct.length; j++) {
                     const tempProduct = stockProduct[j].products[0]
                     if (unique[i] === tempProduct.sellerId.toString()) {
-                        let pri = 0;
-                        if (tempProduct.discount !== 0) {
-                            pri = tempProduct.price - Math.floor((tempProduct.price * tempProduct.discount) / 100)
-                        } else {
-                            pri = tempProduct.price
-                        }
-                        pri = pri - Math.floor((pri * co) / 100)
+                        const pri = getDiscountedUnitPrice(tempProduct)
                         price = price + pri * stockProduct[j].quantity
                         p[i] = {
                             sellerId: unique[i],

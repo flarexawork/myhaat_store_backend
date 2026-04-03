@@ -17,9 +17,18 @@ const authorSchema = new Schema({
         type: Number,
         required: true
     },
+    payment_type: {
+        type: String,
+        enum: ['online', 'cod'],
+        required: true
+    },
     payment_status: {
         type: String,
         required: true
+    },
+    shipping_fee: {
+        type: Number,
+        default: 0
     },
     shippingInfo: {
         type: Object,
