@@ -78,4 +78,13 @@ const authorSchema = new Schema({
     },
 }, { timestamps: true })
 
+authorSchema.index({
+    orderId: 1
+})
+
+authorSchema.index({
+    sellerId: 1,
+    createdAt: -1
+})
+
 module.exports = model('authorOrders', authorSchema)

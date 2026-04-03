@@ -108,5 +108,17 @@ date: {
 
 }, { timestamps: true })
 
+customerOrderSchema.index({
+    customerId: 1,
+    createdAt: -1
+})
+
+customerOrderSchema.index({
+    payment_type: 1,
+    payment_status: 1,
+    order_status: 1,
+    delivery_status: 1,
+    createdAt: 1
+})
 
 module.exports = model('customerOrders', customerOrderSchema)
