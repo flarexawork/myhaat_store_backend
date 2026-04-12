@@ -16,8 +16,12 @@ class productController {
             let { name, category, description, stock, price, discount, shopName, brand } = field;
             let { images } = files;
             name = name.trim()
-            name = name.replace(/[^a-zA-Z0-9\s-]/g, '')
-            const slug = name.split(' ').join('-')
+            name = name.replace(/[^a-zA-Z0-9\s._-]/g, '')
+
+            const slug = name
+  .toLowerCase()
+  .trim()
+  .replace(/\s+/g, '-')
 
             // Normalize: formidable returns a single File object (not array) for 1 file
             if (images && !Array.isArray(images)) {
