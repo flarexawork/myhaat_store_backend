@@ -19,9 +19,9 @@ class productController {
             name = name.replace(/[^a-zA-Z0-9\s._-]/g, '')
 
             const slug = name
-  .toLowerCase()
-  .trim()
-  .replace(/\s+/g, '-')
+                .toLowerCase()
+                .trim()
+                .replace(/\s+/g, '-')
 
             // Normalize: formidable returns a single File object (not array) for 1 file
             if (images && !Array.isArray(images)) {
@@ -33,11 +33,11 @@ class productController {
             }
 
             cloudinary.config({
-            cloud_name: process.env.CLOUD_NAME,
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET,
-            secure: true
-        })
+                cloud_name: process.env.CLOUD_NAME,
+                api_key: process.env.API_KEY,
+                api_secret: process.env.API_SECRET,
+                secure: true
+            })
 
             try {
                 let allImageUrl = [];
@@ -84,12 +84,12 @@ class productController {
             }
 
             // cloudinary config
-           cloudinary.config({
-            cloud_name: process.env.CLOUD_NAME,
-            api_key: process.env.API_KEY,
-            api_secret: process.env.API_SECRET,
-            secure: true
-        })
+            cloudinary.config({
+                cloud_name: process.env.CLOUD_NAME,
+                api_key: process.env.API_KEY,
+                api_secret: process.env.API_SECRET,
+                secure: true
+            })
 
             // delete images from cloudinary
             for (let img of product.images) {
@@ -147,9 +147,8 @@ class productController {
         const { id } = req
         let { name, description, discount, price, brand, productId, stock } = req.body;
         name = name.trim()
-        name = name.replace(/[^a-zA-Z0-9\s-]/g, '')
-        const slug = name.split(' ').join('-')
-
+        name = name.replace(/[^a-zA-Z0-9\s._-]/g, '')
+        const slug = name.toLowerCase().trim().replace(/\s+/g, '-')
         try {
             const product = await productModel.findById(productId)
 

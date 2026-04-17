@@ -196,11 +196,13 @@ class cardController {
 
     add_wishlist = async (req, res) => {
         const {
-            slug
+            userId,
+            productId
         } = req.body
         try {
             const product = await wishlistModel.findOne({
-                slug
+                userId,
+                productId
             })
             if (product) {
                 responseReturn(res, 404, {
@@ -213,6 +215,11 @@ class cardController {
                 })
             }
         } catch (error) {
+            if (error.code === 11000) {
+                return responseReturn(res, 404, {
+                    error: 'Allready added'
+                })
+            }
             console.log(error.message)
         }
     }
