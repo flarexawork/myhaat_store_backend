@@ -26,7 +26,7 @@ class paymentController {
             const seller = await sellerModel.findById(id)
 
             if (!seller) {
-                return responseReturn(res, 404, { message: 'Seller not found' })
+                return responseReturn(res, 404, { message: 'Seller account not found.' })
             }
 
             // 1️⃣ Create Razorpay Route Account
@@ -63,7 +63,7 @@ class paymentController {
 
         } catch (error) {
             console.log("RAZORPAY ERROR:", error)
-            responseReturn(res, 500, { message: error.message })
+            responseReturn(res, 500, { message: 'We could not set up the payment account. Please try again.' })
         }
     }
 
@@ -83,7 +83,7 @@ class paymentController {
             responseReturn(res, 200, { message: 'Payment activated' })
 
         } catch (error) {
-            responseReturn(res, 500, { message: 'Activation failed' })
+            responseReturn(res, 500, { message: 'We could not activate payments. Please try again.' })
         }
     }
 
@@ -125,7 +125,7 @@ class paymentController {
             })
 
         } catch (error) {
-            responseReturn(res, 500, { message: 'Internal server error' })
+            responseReturn(res, 500, { message: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -150,7 +150,7 @@ class paymentController {
             })
 
         } catch (error) {
-            responseReturn(res, 500, { message: 'Withdraw failed' })
+            responseReturn(res, 500, { message: 'We could not submit the withdrawal request. Please try again.' })
         }
     }
 
@@ -166,7 +166,7 @@ class paymentController {
             responseReturn(res, 200, { requests })
 
         } catch (error) {
-            responseReturn(res, 500, { message: 'Internal server error' })
+            responseReturn(res, 500, { message: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -182,7 +182,7 @@ class paymentController {
             const payment = await withdrowRequest.findById(paymentId)
 
             if (!payment) {
-                return responseReturn(res, 404, { message: 'Request not found' })
+                return responseReturn(res, 404, { message: 'Withdrawal request not found.' })
             }
 
             const sellerAccount = await paymentAccountModel.findOne({
@@ -190,7 +190,7 @@ class paymentController {
             })
 
             if (!sellerAccount) {
-                return responseReturn(res, 404, { message: 'Seller account not found' })
+                return responseReturn(res, 404, { message: 'Seller payment account not found.' })
             }
 
             await razorpay.transfers.create({
@@ -210,7 +210,7 @@ class paymentController {
 
         } catch (error) {
             console.log(error)
-            responseReturn(res, 500, { message: 'Transfer failed' })
+            responseReturn(res, 500, { message: 'We could not complete the transfer. Please try again.' })
         }
     }
 

@@ -58,7 +58,7 @@ const corsOptions = {
             return callback(null, true)
         }
 
-        return callback(new Error(`CORS blocked for origin: ${origin}`))
+        return callback(new Error(`This request is not allowed from the current origin.`))
     },
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS']
@@ -104,7 +104,7 @@ const io = socket(server, {
                 return callback(null, true)
             }
 
-            return callback(new Error(`Socket CORS blocked for origin: ${origin}`))
+            return callback(new Error(`This request is not allowed from the current origin.`))
         },
         credentials: true
     }
@@ -308,7 +308,7 @@ app.use('/api', require('./routes/dashboard/productRoutes'));
 app.use('/api', (req, res) => {
     res.status(404).json({
         success: false,
-        message: 'API route not found'
+        message: 'The requested API route was not found.'
     })
 })
 
@@ -336,7 +336,7 @@ if (serveFrontend) {
 app.use((req, res) => {
     res.status(404).json({
         success: false,
-        message: 'Route not found'
+        message: 'The requested route was not found.'
     })
 })
 
@@ -347,11 +347,11 @@ app.use((err, req, res, next) => {
         return next(err)
     }
 
-    const statusCode = err.statusCode || err.status || (err.message && err.message.startsWith('CORS blocked') ? 403 : 500)
+    const statusCode = err.statusCode || err.status || (err.message === 'This request is not allowed from the current origin.' ? 403 : 500)
 
     return res.status(statusCode).json({
         success: false,
-        message: statusCode === 500 ? 'Internal server error' : err.message
+        message: statusCode === 500 ? 'Something went wrong. Please try again later.' : err.message
     })
 })
 

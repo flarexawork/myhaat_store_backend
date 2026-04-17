@@ -7,7 +7,7 @@ module.exports.get_commission_settings = async (req, res) => {
         responseReturn(res, 200, { settings })
     } catch (error) {
         console.error('get_commission_settings error:', error.message)
-        responseReturn(res, 500, { error: 'Failed to fetch commission settings' })
+        responseReturn(res, 500, { error: 'We could not load the commission settings. Please try again.' })
     }
 }
 
@@ -16,13 +16,13 @@ module.exports.update_commission_settings = async (req, res) => {
         const { commission_percent } = req.body
 
         if (commission_percent === undefined || commission_percent === null) {
-            return responseReturn(res, 400, { error: 'commission_percent is required' })
+            return responseReturn(res, 400, { error: 'Commission percentage is required.' })
         }
 
         const percent = Number(commission_percent)
 
         if (isNaN(percent) || percent < 0 || percent > 100) {
-            return responseReturn(res, 400, { error: 'commission_percent must be between 0 and 100' })
+            return responseReturn(res, 400, { error: 'Commission percentage must be between 0 and 100.' })
         }
 
         const updated = await CommissionSettings.updateSettings({
@@ -37,6 +37,6 @@ module.exports.update_commission_settings = async (req, res) => {
         })
     } catch (error) {
         console.error('update_commission_settings error:', error.message)
-        responseReturn(res, 500, { error: 'Failed to update commission settings' })
+        responseReturn(res, 500, { error: 'We could not update the commission settings. Please try again.' })
     }
 }

@@ -3,7 +3,7 @@ const { responseReturn } = require('../utiles/response')
 
 const ensureAdmin = (req, res) => {
     if (req.role !== 'admin') {
-        responseReturn(res, 403, { error: 'Access denied' })
+        responseReturn(res, 403, { error: 'You do not have permission to access this resource.' })
         return false
     }
 
@@ -16,7 +16,7 @@ module.exports.get_public_settings = async (req, res) => {
         responseReturn(res, 200, { settings })
     } catch (error) {
         console.error('get_public_settings error:', error.message)
-        responseReturn(res, 500, { error: 'Failed to fetch settings' })
+        responseReturn(res, 500, { error: 'We could not load the settings. Please try again.' })
     }
 }
 
@@ -28,7 +28,7 @@ module.exports.get_admin_settings = async (req, res) => {
         responseReturn(res, 200, { settings })
     } catch (error) {
         console.error('get_admin_settings error:', error.message)
-        responseReturn(res, 500, { error: 'Failed to fetch settings' })
+        responseReturn(res, 500, { error: 'We could not load the settings. Please try again.' })
     }
 }
 
@@ -39,13 +39,13 @@ module.exports.update_admin_settings = async (req, res) => {
         const { shipping_fee } = req.body
 
         if (shipping_fee === undefined || shipping_fee === null) {
-            return responseReturn(res, 400, { error: 'shipping_fee is required' })
+            return responseReturn(res, 400, { error: 'Shipping fee is required.' })
         }
 
         const parsedShippingFee = Number(shipping_fee)
 
         if (!Number.isFinite(parsedShippingFee) || parsedShippingFee < 0) {
-            return responseReturn(res, 400, { error: 'shipping_fee must be 0 or greater' })
+            return responseReturn(res, 400, { error: 'Shipping fee must be 0 or greater.' })
         }
 
         const updated = await Settings.updateSettings({
@@ -60,6 +60,6 @@ module.exports.update_admin_settings = async (req, res) => {
         })
     } catch (error) {
         console.error('update_admin_settings error:', error.message)
-        responseReturn(res, 500, { error: 'Failed to update settings' })
+        responseReturn(res, 500, { error: 'We could not update the settings. Please try again.' })
     }
 }

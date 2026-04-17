@@ -29,7 +29,7 @@ class productController {
             }
 
             if (!images || images.length === 0) {
-                return responseReturn(res, 400, { error: 'At least 1 product image is required' })
+                return responseReturn(res, 400, { error: 'Please upload at least one product image.' })
             }
 
             cloudinary.config({
@@ -64,7 +64,7 @@ class productController {
                 })
                 responseReturn(res, 201, { message: "product add success" })
             } catch (error) {
-                responseReturn(res, 500, { error: error.message })
+                responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
             }
 
         })
@@ -80,7 +80,7 @@ class productController {
             const product = await productModel.findById(productId);
 
             if (!product) {
-                return responseReturn(res, 404, { error: 'Product not found' });
+                return responseReturn(res, 404, { error: 'The requested product could not be found.' });
             }
 
             // cloudinary config
@@ -103,7 +103,7 @@ class productController {
             responseReturn(res, 200, { message: 'Product deleted successfully' });
 
         } catch (error) {
-            responseReturn(res, 500, { error: error.message });
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' });
         }
     }
 
@@ -153,15 +153,15 @@ class productController {
             const product = await productModel.findById(productId)
 
             if (!product) {
-                return responseReturn(res, 404, { error: 'Product not found' })
+                return responseReturn(res, 404, { error: 'The requested product could not be found.' })
             }
 
             if (String(product.sellerId) !== String(id)) {
-                return responseReturn(res, 403, { error: 'Unauthorized product access' })
+                return responseReturn(res, 403, { error: 'You are not authorized to access this product.' })
             }
 
             if (product.approval_status === 'approved') {
-                return responseReturn(res, 400, { error: 'Approved product cannot be edited by seller' })
+                return responseReturn(res, 400, { error: 'This approved product cannot be edited by the seller.' })
             }
 
             await productModel.findByIdAndUpdate(productId, {
@@ -170,7 +170,7 @@ class productController {
             const updatedProduct = await productModel.findById(productId)
             responseReturn(res, 200, { product: updatedProduct, message: 'product update success' })
         } catch (error) {
-            responseReturn(res, 500, { error: error.message })
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
     product_image_update = async (req, res) => {
@@ -182,21 +182,21 @@ class productController {
             const { newImage } = files
 
             if (err) {
-                responseReturn(res, 404, { error: err.message })
+                responseReturn(res, 404, { error: 'We could not update the product image. Please try again.' })
             } else {
                 try {
                     const product = await productModel.findById(productId)
 
                     if (!product) {
-                        return responseReturn(res, 404, { error: 'Product not found' })
+                        return responseReturn(res, 404, { error: 'The requested product could not be found.' })
                     }
 
                     if (String(product.sellerId) !== String(id)) {
-                        return responseReturn(res, 403, { error: 'Unauthorized product access' })
+                        return responseReturn(res, 403, { error: 'You are not authorized to access this product.' })
                     }
 
                     if (product.approval_status === 'approved') {
-                        return responseReturn(res, 400, { error: 'Approved product cannot be edited by seller' })
+                        return responseReturn(res, 400, { error: 'This approved product cannot be edited by the seller.' })
                     }
 
                     cloudinary.config({
@@ -211,7 +211,7 @@ class productController {
                         let { images } = product
                         const index = images.findIndex(img => img === oldImage)
                         if (index === -1) {
-                            return responseReturn(res, 400, { error: 'Old image not found for this product' })
+                            return responseReturn(res, 400, { error: 'The selected image was not found for this product.' })
                         }
                         images[index] = result.secure_url;
 
@@ -222,10 +222,10 @@ class productController {
                         const updatedProduct = await productModel.findById(productId)
                         responseReturn(res, 200, { product: updatedProduct, message: 'product image update success' })
                     } else {
-                        responseReturn(res, 404, { error: 'image upload failed' })
+                        responseReturn(res, 404, { error: 'We could not upload the image. Please try again.' })
                     }
                 } catch (error) {
-                    responseReturn(res, 404, { error: error.message })
+                    responseReturn(res, 404, { error: 'We could not update the product image. Please try again.' })
                 }
             }
         })
@@ -249,7 +249,7 @@ class productController {
 
             responseReturn(res, 200, { message: 'Product approved', product });
         } catch (error) {
-            responseReturn(res, 500, { error: error.message });
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' });
         }
     }
 
@@ -270,7 +270,7 @@ class productController {
 
             responseReturn(res, 200, { message: 'Product rejected', product });
         } catch (error) {
-            responseReturn(res, 500, { error: error.message });
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' });
         }
     }
 
@@ -357,7 +357,7 @@ class productController {
             });
 
         } catch (error) {
-            responseReturn(res, 500, { error: error.message });
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' });
         }
     };
 
@@ -377,18 +377,18 @@ class productController {
                 });
 
             if (!product) {
-                return responseReturn(res, 404, { error: 'Product not found' });
+                return responseReturn(res, 404, { error: 'The requested product could not be found.' });
             }
 
             // Check if seller is active
             if (product.sellerId && product.sellerId.status !== 'active') {
-                return responseReturn(res, 404, { error: 'Product not found' });
+                return responseReturn(res, 404, { error: 'The requested product could not be found.' });
             }
 
             responseReturn(res, 200, { product });
 
         } catch (error) {
-            responseReturn(res, 500, { error: error.message });
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' });
         }
     };
 

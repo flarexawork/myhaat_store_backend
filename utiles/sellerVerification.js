@@ -98,15 +98,15 @@ const validateIdentityDocument = (documentType = '', documentNumber = '') => {
             : trimmedNumber
 
     if (!Object.values(DOCUMENT_TYPES).includes(normalizedDocumentType)) {
-        return { error: 'Document type must be either aadhaar or pan' }
+        return { error: 'Please select either Aadhaar or PAN as the document type.' }
     }
 
     if (normalizedDocumentType === DOCUMENT_TYPES.AADHAAR && !FORMATTED_AADHAAR_REGEX.test(normalizedDocumentNumber)) {
-        return { error: 'Invalid Aadhaar format (xxxx-xxxx-xxxx)' }
+        return { error: 'Please enter a valid Aadhaar number in the format xxxx-xxxx-xxxx.' }
     }
 
     if (normalizedDocumentType === DOCUMENT_TYPES.PAN && !PAN_REGEX.test(normalizedDocumentNumber)) {
-        return { error: 'Invalid PAN format' }
+        return { error: 'Please enter a valid PAN number.' }
     }
 
     return {

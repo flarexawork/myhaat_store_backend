@@ -8,7 +8,7 @@ const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 const isStrongPassword = (password = '') => PASSWORD_REGEX.test(password)
 
-const getStrongPasswordMessage = () => 'Password must be at least 8 characters and include uppercase, lowercase, number and special character'
+const getStrongPasswordMessage = () => 'Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character.'
 
 const getClientIp = (req) => {
     const forwardedFor = req.headers['x-forwarded-for']

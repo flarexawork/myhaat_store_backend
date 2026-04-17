@@ -392,7 +392,7 @@ class chatController {
                 (senderRole === 'seller' && receiverRole === 'customer') ||
                 (senderRole === 'customer' && receiverRole === 'seller')
             ) {
-                return responseReturn(res, 403, { error: 'Direct chat not allowed' })
+                return responseReturn(res, 403, { error: 'Direct chat is not available for this conversation.' })
             }
 
             const messageData = await adminMessage.create({
@@ -412,7 +412,7 @@ class chatController {
     get_admin_conversations = async (req, res) => {
         try {
             if (req.role !== 'admin') {
-                return responseReturn(res, 403, { error: 'unauthorized' })
+                return responseReturn(res, 403, { error: 'You are not authorized to perform this action.' })
             }
 
             const messages = await adminMessage.find({
@@ -481,7 +481,7 @@ class chatController {
 
         try {
             if (req.role !== 'admin' && req.id !== userId) {
-                return responseReturn(res, 403, { error: 'unauthorized' })
+                return responseReturn(res, 403, { error: 'You are not authorized to perform this action.' })
             }
 
             let query = {

@@ -150,24 +150,24 @@ class customerAuthController {
             if (!phone || !normalizePhone(phone)) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Phone number is required'
+                    message: 'Phone number is required.'
                 })
             }
 
             const sanitizedPhone = normalizePhone(phone)
             const phoneDigits = sanitizedPhone.replace(/\D/g, '')
 
-            if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+            if (phoneDigits.length < 10 || phoneDigits.length > 13) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Phone number must be between 10 and 15 digits'
+                    message: 'Phone number must be between 10 and 13 digits.'
                 })
             }
 
             const normalizedEmail = normalizeEmail(email)
             const customer = await customerModel.findOne({ email: normalizedEmail })
             if (customer) {
-                return responseReturn(res, 404, { error: 'Email already exits' })
+                return responseReturn(res, 404, { error: 'An account with this email address already exists.' })
             } else {
                 const createCustomer = await customerModel.create({
                     name: name.trim(),
@@ -206,7 +206,7 @@ class customerAuthController {
             console.log(error.message)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Internal server error'
+                message: 'Something went wrong. Please try again later.'
             })
         }
     }
@@ -221,7 +221,7 @@ class customerAuthController {
                 if (customer.isEmailVerified === false) {
                     return responseReturn(res, 403, {
                         success: false,
-                        message: 'Please verify your email before logging in'
+                        message: 'Please verify your email address before logging in.'
                     })
                 }
 
@@ -237,16 +237,16 @@ class customerAuthController {
                         refreshToken
                     })
                 } else {
-                    return responseReturn(res, 404, { error: "Password wrong" })
+                    return responseReturn(res, 404, { error: "The password you entered is incorrect." })
                 }
             } else {
-                return responseReturn(res, 404, { error: 'Email not found' })
+                return responseReturn(res, 404, { error: 'No account was found with this email address.' })
             }
         } catch (error) {
             console.log(error.message)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Internal server error'
+                message: 'Something went wrong. Please try again later.'
             })
         }
     }
@@ -258,7 +258,7 @@ class customerAuthController {
             if (!token) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Invalid or expired verification link'
+                    message: 'This verification link is invalid or has expired.'
                 })
             }
 
@@ -272,7 +272,7 @@ class customerAuthController {
             if (!customer) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Invalid or expired verification link'
+                    message: 'This verification link is invalid or has expired.'
                 })
             }
 
@@ -289,7 +289,7 @@ class customerAuthController {
             console.log(error.message)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Internal server error'
+                message: 'Something went wrong. Please try again later.'
             })
         }
     }
@@ -301,7 +301,7 @@ class customerAuthController {
             if (!email) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Email is required'
+                    message: 'Email address is required.'
                 })
             }
 
@@ -312,14 +312,14 @@ class customerAuthController {
             if (!customer) {
                 return responseReturn(res, 404, {
                     success: false,
-                    message: 'Email not found'
+                    message: 'No account was found with this email address.'
                 })
             }
 
             if (customer.isEmailVerified) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Email already verified'
+                    message: 'This email address has already been verified.'
                 })
             }
 
@@ -333,7 +333,7 @@ class customerAuthController {
             console.log(error.message)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Unable to send verification email'
+                message: 'We could not send the verification email. Please try again.'
             })
         }
     }
@@ -345,7 +345,7 @@ class customerAuthController {
             if (!email) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Email is required'
+                    message: 'Email address is required.'
                 })
             }
 
@@ -380,7 +380,7 @@ class customerAuthController {
             console.log(error.message)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Unable to process forgot password request'
+                message: 'We could not process your password reset request. Please try again.'
             })
         }
     }
@@ -392,7 +392,7 @@ class customerAuthController {
             if (!token || !password) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Token and password are required'
+                    message: 'Reset token and new password are required.'
                 })
             }
 
@@ -406,7 +406,7 @@ class customerAuthController {
             if (!customer) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Invalid or expired reset token'
+                    message: 'This password reset link is invalid or has expired.'
                 })
             }
 
@@ -426,7 +426,7 @@ class customerAuthController {
             console.log(error.message)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Unable to reset password'
+                message: 'We could not reset your password. Please try again.'
             })
         }
     }
@@ -438,7 +438,7 @@ class customerAuthController {
             if (!providedRefreshToken) {
                 return responseReturn(res, 401, {
                     success: false,
-                    message: 'Refresh token is required'
+                    message: 'A session token is required.'
                 })
             }
 
@@ -453,7 +453,7 @@ class customerAuthController {
             if (!customer) {
                 return responseReturn(res, 401, {
                     success: false,
-                    message: 'Invalid refresh token'
+                    message: 'Your session is invalid. Please log in again.'
                 })
             }
 
@@ -464,14 +464,14 @@ class customerAuthController {
 
                 return responseReturn(res, 401, {
                     success: false,
-                    message: 'Session expired. Please login again.'
+                    message: 'Your session has expired. Please log in again.'
                 })
             }
 
             if (customer.isEmailVerified === false) {
                 return responseReturn(res, 403, {
                     success: false,
-                    message: 'Please verify your email before logging in'
+                        message: 'Please verify your email address before logging in.'
                 })
             }
 
@@ -487,7 +487,7 @@ class customerAuthController {
             console.log(error.message)
             return responseReturn(res, 401, {
                 success: false,
-                message: 'Invalid or expired refresh token'
+                message: 'Your session is invalid or has expired. Please log in again.'
             })
         }
     }
@@ -534,7 +534,7 @@ class customerAuthController {
             console.log(error.message)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Unable to logout'
+                message: 'We could not log you out. Please try again.'
             })
         }
     }
@@ -546,21 +546,21 @@ class customerAuthController {
             if (req.role !== 'customer') {
                 return responseReturn(res, 403, {
                     success: false,
-                    message: 'unauthorized'
+                    message: 'You are not authorized to perform this action.'
                 })
             }
 
             if (!currentPassword || !newPassword || !confirmPassword) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'All password fields are required'
+                    message: 'Please fill in all password fields.'
                 })
             }
 
             if (newPassword !== confirmPassword) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'New password and confirm password do not match'
+                    message: 'The new password and confirmation password do not match.'
                 })
             }
 
@@ -578,7 +578,7 @@ class customerAuthController {
             if (!customer) {
                 return responseReturn(res, 404, {
                     success: false,
-                    message: 'User not found'
+                    message: 'User account not found.'
                 })
             }
 
@@ -586,7 +586,7 @@ class customerAuthController {
             if (!passwordMatches) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Current password is incorrect'
+                    message: 'The current password is incorrect.'
                 })
             }
 
@@ -594,7 +594,7 @@ class customerAuthController {
             if (reusedPassword) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'New password must be different from your current password'
+                    message: 'The new password must be different from your current password.'
                 })
             }
 
@@ -614,7 +614,7 @@ class customerAuthController {
             console.log(error.message)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Unable to change password'
+                message: 'We could not change your password. Please try again.'
             })
         }
     }

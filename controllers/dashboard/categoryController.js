@@ -36,13 +36,13 @@ class categoryController {
         const form = formidable({})
         form.parse(req, async (err, fields, files) => {
             if (err) {
-                responseReturn(res, 404, { error: 'something error' })
+                responseReturn(res, 404, { error: 'Something went wrong. Please try again later.' })
             } else {
                 let name = getFormValue(fields.name)
                 const image = getFormFile(files.image)
 
                 if (!name || !image) {
-                    return responseReturn(res, 400, { error: 'Name and image are required' })
+                    return responseReturn(res, 400, { error: 'Please provide both a name and an image.' })
                 }
 
                 name = name.trim()
@@ -61,10 +61,10 @@ class categoryController {
                         })
                         responseReturn(res, 201, { category, message: 'category add success' })
                     } else {
-                        responseReturn(res, 404, { error: 'Image upload failed' })
+                        responseReturn(res, 404, { error: 'We could not upload the image. Please try again.' })
                     }
                 } catch (error) {
-                    responseReturn(res, 500, { error: 'Internal server error' })
+                    responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
                 }
 
             }
@@ -73,18 +73,18 @@ class categoryController {
 
     update_category = async (req, res) => {
         if (req.role !== 'admin') {
-            return responseReturn(res, 401, { message: 'unauthorized' })
+            return responseReturn(res, 401, { message: 'You are not authorized to perform this action.' })
         }
 
         const { categoryId } = req.params
         if (!categoryId || !ObjectId.isValid(categoryId)) {
-            return responseReturn(res, 400, { error: 'Valid category id is required' })
+            return responseReturn(res, 400, { error: 'A valid category is required.' })
         }
 
         const form = formidable({})
         form.parse(req, async (err, fields, files) => {
             if (err) {
-                return responseReturn(res, 400, { error: 'Unable to process category update request' })
+                return responseReturn(res, 400, { error: 'We could not update the category. Please try again.' })
             }
 
             const image = getFormFile(files.image)
@@ -93,12 +93,12 @@ class categoryController {
             try {
                 const category = await categoryModel.findById(categoryId)
                 if (!category) {
-                    return responseReturn(res, 404, { error: 'Category not found' })
+                    return responseReturn(res, 404, { error: 'The requested category could not be found.' })
                 }
 
                 const name = (nameValue ? nameValue.trim() : category.name)
                 if (!name) {
-                    return responseReturn(res, 400, { error: 'Category name is required' })
+                    return responseReturn(res, 400, { error: 'Category name is required.' })
                 }
 
                 const payload = {
@@ -125,19 +125,19 @@ class categoryController {
                 })
             } catch (error) {
                 console.log(error.message)
-                return responseReturn(res, 500, { error: 'Internal server error' })
+                return responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
             }
         })
     }
 
     delete_category = async (req, res) => {
         if (req.role !== 'admin') {
-            return responseReturn(res, 401, { message: 'unauthorized' })
+            return responseReturn(res, 401, { message: 'You are not authorized to perform this action.' })
         }
 
         const { categoryId } = req.params
         if (!categoryId || !ObjectId.isValid(categoryId)) {
-            return responseReturn(res, 400, { error: 'Valid category id is required' })
+            return responseReturn(res, 400, { error: 'A valid category is required.' })
         }
 
         configureCloudinary()
@@ -145,7 +145,7 @@ class categoryController {
         try {
             const category = await categoryModel.findById(categoryId)
             if (!category) {
-                return responseReturn(res, 404, { error: 'Category not found' })
+                return responseReturn(res, 404, { error: 'The requested category could not be found.' })
             }
 
             const publicId = getCloudinaryPublicId(category.image)
@@ -161,7 +161,7 @@ class categoryController {
             })
         } catch (error) {
             console.log(error.message)
-            return responseReturn(res, 500, { error: 'Internal server error' })
+            return responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 

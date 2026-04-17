@@ -34,11 +34,11 @@ const getSingleFileByAliases = (files, aliases) => {
 const validateFiles = (files = []) => {
     for (const file of files) {
         if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-            return 'Only JPG, PNG, WEBP allowed'
+            return 'Only JPG, PNG, and WEBP image files are allowed.'
         }
 
         if (file.size > MAX_FILE_SIZE) {
-            return 'File size must be under 2MB'
+            return 'Each file must be smaller than 2 MB.'
         }
     }
 
@@ -55,10 +55,10 @@ module.exports.sellerVerificationUploadMiddleware = (req, res, next) => {
     form.parse(req, (err, fields, files) => {
         if (err) {
             if (String(err.message || '').toLowerCase().includes('maxfilesize')) {
-                return responseReturn(res, 400, { error: 'File size must be under 2MB' })
+                return responseReturn(res, 400, { error: 'Each file must be smaller than 2 MB.' })
             }
 
-            return responseReturn(res, 400, { error: err.message })
+            return responseReturn(res, 400, { error: 'We could not process the uploaded files. Please try again.' })
         }
 
         const image = getSingleFileByAliases(files, ['image', 'profileImage'])
@@ -66,7 +66,7 @@ module.exports.sellerVerificationUploadMiddleware = (req, res, next) => {
         const documentImages = getFilesByAliases(files, ['documentImages', 'documentImage', 'identityDetails.documentImages', 'identityDetails[documentImages]'])
 
         if (shopImages.length > MAX_FILES_PER_FIELD || documentImages.length > MAX_FILES_PER_FIELD) {
-            return responseReturn(res, 400, { error: 'Maximum 5 images allowed per field' })
+            return responseReturn(res, 400, { error: 'You can upload up to 5 images for each field.' })
         }
 
         const fileValidationError = validateFiles([

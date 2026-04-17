@@ -16,7 +16,7 @@ class OrderStatusService {
             return {
                 success: false,
                 code: 401,
-                message: 'unauthorized'
+                message: 'You are not authorized to perform this action.'
             }
         }
 
@@ -31,7 +31,7 @@ class OrderStatusService {
             return {
                 success: false,
                 code: 400,
-                message: 'Invalid status transition'
+                message: 'This status change is not allowed.'
             }
         }
 
@@ -39,7 +39,7 @@ class OrderStatusService {
             return {
                 success: false,
                 code: 400,
-                message: 'Order status already finalized'
+                message: 'This order status has already been finalized.'
             }
         }
 
@@ -58,7 +58,7 @@ class OrderStatusService {
             return {
                 success: false,
                 code: 400,
-                message: 'Invalid status transition'
+                message: 'This status change is not allowed.'
             }
         }
 
@@ -66,7 +66,7 @@ class OrderStatusService {
             return {
                 success: false,
                 code: 400,
-                message: 'Invalid status transition'
+                message: 'This status change is not allowed.'
             }
         }
 
@@ -74,7 +74,7 @@ class OrderStatusService {
             return {
                 success: false,
                 code: 400,
-                message: 'Invalid status transition'
+                message: 'This status change is not allowed.'
             }
         }
 
@@ -82,7 +82,7 @@ class OrderStatusService {
             return {
                 success: false,
                 code: 400,
-                message: 'Invalid delivery status transition'
+                message: 'This delivery status change is not allowed.'
             }
         }
 

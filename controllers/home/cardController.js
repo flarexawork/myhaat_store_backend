@@ -35,7 +35,7 @@ class cardController {
             })
             if (product) {
                 responseReturn(res, 404, {
-                    error: 'Product already added to card'
+                    error: 'This item is already in your cart.'
                 })
             } else {
                 const product = await cardModel.create({
@@ -206,7 +206,7 @@ class cardController {
             })
             if (product) {
                 responseReturn(res, 404, {
-                    error: 'Allready added'
+                    error: 'This item is already in your wishlist.'
                 })
             } else {
                 await wishlistModel.create(req.body)
@@ -217,7 +217,7 @@ class cardController {
         } catch (error) {
             if (error.code === 11000) {
                 return responseReturn(res, 404, {
-                    error: 'Allready added'
+                    error: 'This item is already in your wishlist.'
                 })
             }
             console.log(error.message)

@@ -120,7 +120,7 @@ module.exports.get_seller_dashboard_data = async (req, res) => {
         })
     } catch (error) {
         console.log('get seller dashboard data error ' + error.message)
-        responseReturn(res, 500, { message: 'Failed to load seller dashboard data' })
+        responseReturn(res, 500, { message: 'We could not load the seller dashboard. Please try again.' })
     }
 }
 
@@ -182,7 +182,7 @@ module.exports.get_admin_dashboard_data = async (req, res) => {
 
     } catch (error) {
         console.log('get admin dashboard data error ' + error.message)
-        responseReturn(res, 500, { message: 'Failed to load admin dashboard data' })
+        responseReturn(res, 500, { message: 'We could not load the admin dashboard. Please try again.' })
     }
 
 }
