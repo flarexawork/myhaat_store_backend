@@ -34,11 +34,11 @@ module.exports.authMiddleware = async (req, res, next) => {
                     const seller = await sellerModel.findById(req.id).select('accountStatus adminRemark status passwordChangedAt')
 
                     if (!seller) {
-                        return res.status(401).json({ message: 'unauthorized' })
+                        return res.status(401).json({ message: 'You are not authorized to perform this action.' })
                     }
 
                     if (hasPasswordChangedAfter(seller.passwordChangedAt, userInfo.iat)) {
-                        return res.status(401).json({ message: 'Session expired. Please login again.' })
+                        return res.status(401).json({ message: 'Your session has expired. Please log in again.' })
                     }
 
                     const accountStatus = seller.accountStatus || (seller.status === 'deactive' ? 'inactive' : 'active')
@@ -55,11 +55,11 @@ module.exports.authMiddleware = async (req, res, next) => {
                     const admin = await adminModel.findById(req.id).select('email adminRole role passwordChangedAt')
 
                     if (!admin) {
-                        return res.status(401).json({ message: 'unauthorized' })
+                        return res.status(401).json({ message: 'You are not authorized to perform this action.' })
                     }
 
                     if (hasPasswordChangedAfter(admin.passwordChangedAt, userInfo.iat)) {
-                        return res.status(401).json({ message: 'Session expired. Please login again.' })
+                        return res.status(401).json({ message: 'Your session has expired. Please log in again.' })
                     }
 
                     req.adminRole = getAdminPrivilegeRole(admin)
@@ -69,23 +69,23 @@ module.exports.authMiddleware = async (req, res, next) => {
                     const customer = await customerModel.findById(req.id).select('passwordChangedAt')
 
                     if (!customer) {
-                        return res.status(401).json({ message: 'unauthorized' })
+                        return res.status(401).json({ message: 'You are not authorized to perform this action.' })
                     }
 
                     if (hasPasswordChangedAfter(customer.passwordChangedAt, userInfo.iat)) {
-                        return res.status(401).json({ message: 'Session expired. Please login again.' })
+                        return res.status(401).json({ message: 'Your session has expired. Please log in again.' })
                     }
                 }
 
                 next()
             } catch (error) {
-                return res.status(401).json({ message: 'unauthorized' })
+                return res.status(401).json({ message: 'You are not authorized to perform this action.' })
             }
         } else {
-            return res.status(401).json({ message: 'unauthorized' })
+            return res.status(401).json({ message: 'You are not authorized to perform this action.' })
         }
     } else {
-        return res.status(401).json({ message: 'unauthorized' })
+        return res.status(401).json({ message: 'You are not authorized to perform this action.' })
     }
 
 }

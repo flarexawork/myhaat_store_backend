@@ -25,7 +25,7 @@ const pickField = (fields, aliases) => {
 class sellerVerificationController {
     complete_verification = async (req, res) => {
         if (req.role !== 'seller') {
-            return responseReturn(res, 403, { error: 'Only sellers can complete verification' })
+            return responseReturn(res, 403, { error: 'Only seller accounts can complete verification.' })
         }
 
         const { fields = {}, files = {} } = req.sellerVerificationForm || {}
@@ -43,11 +43,11 @@ class sellerVerificationController {
         const documentImages = files.documentImages || []
 
         if (!shopName || !division || !district || !subDistrict || !fullName || !address || !documentType || !documentNumber) {
-            return responseReturn(res, 400, { error: 'All shop and identity details are required' })
+            return responseReturn(res, 400, { error: 'Please provide all shop and identity details.' })
         }
 
         if (shopImages.length === 0 || documentImages.length === 0) {
-            return responseReturn(res, 400, { error: 'Shop images and document images are required' })
+            return responseReturn(res, 400, { error: 'Please upload all required shop and document images.' })
         }
 
         const validation = validateIdentityDocument(documentType, documentNumber)
@@ -60,11 +60,11 @@ class sellerVerificationController {
             const seller = await sellerModel.findById(req.id)
 
             if (!seller) {
-                return responseReturn(res, 404, { error: 'Seller not found' })
+                return responseReturn(res, 404, { error: 'Seller account not found.' })
             }
 
             if (!seller.image && !image) {
-                return responseReturn(res, 400, { error: 'Profile image is required' })
+                return responseReturn(res, 400, { error: 'Please upload a profile image.' })
             }
 
             const [uploadedProfileImage, uploadedShopImages, uploadedDocumentImages] = await Promise.all([
@@ -117,7 +117,7 @@ class sellerVerificationController {
                 seller: updatedSeller ? normalizeVerificationMedia(updatedSeller.toObject()) : null
             })
         } catch (error) {
-            return responseReturn(res, 500, { error: error.message })
+            return responseReturn(res, 500, { error: 'We could not submit the verification details. Please try again.' })
         }
     }
 }

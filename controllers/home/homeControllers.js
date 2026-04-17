@@ -93,7 +93,7 @@ class homeControllers {
             const product = await productModel.findOne(query)
             
             if (!product) {
-                return responseReturn(res, 404, { error: 'Product not found' })
+                return responseReturn(res, 404, { error: 'The requested product could not be found.' })
             }
             
             const relatedProducts = await productModel.find({

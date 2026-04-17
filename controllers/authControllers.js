@@ -117,13 +117,13 @@ class authControllers {
                     })
                     responseReturn(res, 200, { token, message: 'Login success' })
                 } else {
-                    responseReturn(res, 404, { error: "Password wrong" })
+                    responseReturn(res, 404, { error: "The password you entered is incorrect." })
                 }
             } else {
-                responseReturn(res, 404, { error: "Email not found" })
+                responseReturn(res, 404, { error: "No account was found with this email address." })
             }
         } catch (error) {
-            responseReturn(res, 500, { error: error.message })
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -135,7 +135,7 @@ class authControllers {
         try {
 
             if (!credential || !password) {
-                return responseReturn(res, 400, { error: "All fields are required" })
+                return responseReturn(res, 400, { error: "Please fill in all required fields." })
             }
 
             // Detect if input is mobile (starts with + and digits)
@@ -151,20 +151,20 @@ class authControllers {
                 .select('+password')
 
             if (!seller) {
-                return responseReturn(res, 404, { error: "Invalid email or mobile" })
+                return responseReturn(res, 404, { error: "No account was found with that email address or mobile number." })
             }
 
             if (seller.isEmailVerified === false) {
                 return responseReturn(res, 403, {
                     success: false,
-                    message: 'Please verify your email before logging in'
+                    message: 'Please verify your email address before logging in.'
                 })
             }
 
             const match = await bcrpty.compare(password, seller.password)
 
             if (!match) {
-                return responseReturn(res, 400, { error: "Invalid password" })
+                return responseReturn(res, 400, { error: "The password you entered is incorrect." })
             }
 
             const token = await createToken({
@@ -187,7 +187,7 @@ class authControllers {
 
         } catch (error) {
             console.log(error)
-            return responseReturn(res, 500, { error: error.message })
+            return responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -197,13 +197,13 @@ class authControllers {
         try {
 
             if (!email || !name || !password || !mobile) {
-                return responseReturn(res, 400, { error: 'All fields are required' })
+                return responseReturn(res, 400, { error: 'Please fill in all required fields.' })
             }
 
 
             const mobileRegex = /^\+[1-9]\d{7,14}$/
             if (!mobileRegex.test(mobile)) {
-                return responseReturn(res, 400, { error: 'Invalid mobile number format. Use country code like +919876543210' })
+                return responseReturn(res, 400, { error: 'Please enter a valid mobile number, including the country code, for example +919876543210.' })
             }
 
 
@@ -211,13 +211,13 @@ class authControllers {
 
             const emailExist = await sellerModel.findOne({ email: normalizedEmail })
             if (emailExist) {
-                return responseReturn(res, 409, { error: 'Email already exists' })
+                return responseReturn(res, 409, { error: 'An account with this email address already exists.' })
             }
 
 
             const mobileExist = await sellerModel.findOne({ mobile })
             if (mobileExist) {
-                return responseReturn(res, 409, { error: 'Mobile number already exists' })
+                return responseReturn(res, 409, { error: 'An account with this mobile number already exists.' })
             }
 
 
@@ -259,7 +259,7 @@ class authControllers {
 
         } catch (error) {
             console.log(error)
-            return responseReturn(res, 500, { error: error.message })
+            return responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -270,7 +270,7 @@ class authControllers {
             if (!token) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Invalid or expired verification link'
+                    message: 'This verification link is invalid or has expired.'
                 })
             }
 
@@ -284,7 +284,7 @@ class authControllers {
             if (!seller) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Invalid or expired verification link'
+                    message: 'This verification link is invalid or has expired.'
                 })
             }
 
@@ -301,7 +301,7 @@ class authControllers {
             console.log(error)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Internal server error'
+                message: 'Something went wrong. Please try again later.'
             })
         }
     }
@@ -313,7 +313,7 @@ class authControllers {
             if (!email) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Email is required'
+                    message: 'Email address is required.'
                 })
             }
 
@@ -324,14 +324,14 @@ class authControllers {
             if (!seller) {
                 return responseReturn(res, 404, {
                     success: false,
-                    message: 'Email not found'
+                    message: 'No account was found with this email address.'
                 })
             }
 
             if (seller.isEmailVerified) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Email already verified'
+                    message: 'This email address has already been verified.'
                 })
             }
 
@@ -345,7 +345,7 @@ class authControllers {
             console.log(error)
             return responseReturn(res, 500, {
                 success: false,
-                message: 'Unable to send verification email'
+                message: 'We could not send the verification email. Please try again.'
             })
         }
     }
@@ -358,7 +358,7 @@ class authControllers {
             if (role === 'admin') {
                 const user = await adminModel.findById(id)
                 if (!user) {
-                    return responseReturn(res, 404, { error: 'User not found' })
+                    return responseReturn(res, 404, { error: 'User account not found.' })
                 }
 
                 const userInfo = user.toObject()
@@ -387,7 +387,7 @@ class authControllers {
                 })
             }
         } catch (error) {
-            responseReturn(res, 500, { error: 'Internal server error' })
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -399,7 +399,7 @@ class authControllers {
             const { image } = files
             try {
                 if (!image?.filepath) {
-                    return responseReturn(res, 400, { error: 'Image is required' })
+                    return responseReturn(res, 400, { error: 'Please upload an image.' })
                 }
 
                 const result = await cloudinary.uploader.upload(image.filepath, { folder: 'profile' })
@@ -410,32 +410,32 @@ class authControllers {
                     const userInfo = await sellerModel.findById(id)
                     responseReturn(res, 201, { message: 'image upload success', userInfo })
                 } else {
-                    responseReturn(res, 404, { error: 'image upload failed' })
+                    responseReturn(res, 404, { error: 'We could not upload the image. Please try again.' })
                 }
             } catch (error) {
                 //console.log(error)
-                responseReturn(res, 500, { error: error.message })
+                responseReturn(res, 500, { error: 'We could not upload the image. Please try again.' })
             }
         })
     }
 
     admin_update_profile = async (req, res) => {
         if (req.role !== 'admin') {
-            return responseReturn(res, 403, { message: 'unauthorized' })
+            return responseReturn(res, 403, { message: 'You are not authorized to perform this action.' })
         }
 
         const form = formidable({ multiples: false })
 
         form.parse(req, async (err, _, files) => {
             if (err) {
-                return responseReturn(res, 400, { message: 'Unable to process profile update' })
+                return responseReturn(res, 400, { message: 'We could not update the profile. Please try again.' })
             }
 
             const { image } = files
 
             try {
                 if (!image?.filepath) {
-                    return responseReturn(res, 400, { message: 'Image is required' })
+                    return responseReturn(res, 400, { message: 'Please upload an image.' })
                 }
 
                 configureCloudinary()
@@ -443,7 +443,7 @@ class authControllers {
                 const result = await cloudinary.uploader.upload(image.filepath, { folder: 'profile' })
 
                 if (!result?.secure_url) {
-                    return responseReturn(res, 400, { message: 'Image upload failed' })
+                    return responseReturn(res, 400, { message: 'We could not upload the image. Please try again.' })
                 }
 
                 const admin = await adminModel.findByIdAndUpdate(
@@ -453,7 +453,7 @@ class authControllers {
                 )
 
                 if (!admin) {
-                    return responseReturn(res, 404, { message: 'Admin not found' })
+                    return responseReturn(res, 404, { message: 'Admin account not found.' })
                 }
 
                 const userInfo = admin.toObject()
@@ -464,7 +464,7 @@ class authControllers {
                     userInfo
                 })
             } catch (error) {
-                return responseReturn(res, 500, { message: 'Unable to update profile' })
+                return responseReturn(res, 500, { message: 'We could not update the profile. Please try again.' })
             }
         })
     }
@@ -488,7 +488,7 @@ class authControllers {
             const userInfo = await sellerModel.findById(id)
             responseReturn(res, 201, { message: 'Profile info add success', userInfo })
         } catch (error) {
-            responseReturn(res, 500, { error: error.message })
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -497,15 +497,15 @@ class authControllers {
 
         try {
             if (req.role !== 'seller') {
-                return responseReturn(res, 403, { message: 'unauthorized' })
+                return responseReturn(res, 403, { message: 'You are not authorized to perform this action.' })
             }
 
             if (!currentPassword || !newPassword || !confirmPassword) {
-                return responseReturn(res, 400, { message: 'All password fields are required' })
+                return responseReturn(res, 400, { message: 'Please fill in all password fields.' })
             }
 
             if (newPassword !== confirmPassword) {
-                return responseReturn(res, 400, { message: 'New password and confirm password do not match' })
+                return responseReturn(res, 400, { message: 'The new password and confirmation password do not match.' })
             }
 
             if (!isStrongPassword(newPassword)) {
@@ -514,17 +514,17 @@ class authControllers {
 
             const seller = await sellerModel.findById(req.id).select('+password')
             if (!seller) {
-                return responseReturn(res, 404, { message: 'Seller not found' })
+                return responseReturn(res, 404, { message: 'Seller account not found.' })
             }
 
             const passwordMatches = await bcrpty.compare(currentPassword, seller.password)
             if (!passwordMatches) {
-                return responseReturn(res, 400, { message: 'Current password is incorrect' })
+                return responseReturn(res, 400, { message: 'The current password is incorrect.' })
             }
 
             const reusedPassword = await bcrpty.compare(newPassword, seller.password)
             if (reusedPassword) {
-                return responseReturn(res, 400, { message: 'New password must be different from your current password' })
+                return responseReturn(res, 400, { message: 'The new password must be different from your current password.' })
             }
 
             seller.password = await bcrpty.hash(newPassword, 10)
@@ -541,7 +541,7 @@ class authControllers {
 
             return responseReturn(res, 200, { message: 'Password changed successfully. Please login again.' })
         } catch (error) {
-            return responseReturn(res, 500, { message: 'Unable to change password' })
+            return responseReturn(res, 500, { message: 'We could not change your password. Please try again.' })
         }
     }
 
@@ -550,15 +550,15 @@ class authControllers {
 
         try {
             if (req.role !== 'admin') {
-                return responseReturn(res, 403, { message: 'unauthorized' })
+                return responseReturn(res, 403, { message: 'You are not authorized to perform this action.' })
             }
 
             if (!currentPassword || !newPassword || !confirmPassword) {
-                return responseReturn(res, 400, { message: 'All password fields are required' })
+                return responseReturn(res, 400, { message: 'Please fill in all password fields.' })
             }
 
             if (newPassword !== confirmPassword) {
-                return responseReturn(res, 400, { message: 'New password and confirm password do not match' })
+                return responseReturn(res, 400, { message: 'The new password and confirmation password do not match.' })
             }
 
             if (!isStrongPassword(newPassword)) {
@@ -567,17 +567,17 @@ class authControllers {
 
             const admin = await adminModel.findById(req.id).select('+password email name adminRole')
             if (!admin) {
-                return responseReturn(res, 404, { message: 'Admin not found' })
+                return responseReturn(res, 404, { message: 'Admin account not found.' })
             }
 
             const passwordMatches = await bcrpty.compare(currentPassword, admin.password)
             if (!passwordMatches) {
-                return responseReturn(res, 400, { message: 'Current password is incorrect' })
+                return responseReturn(res, 400, { message: 'The current password is incorrect.' })
             }
 
             const reusedPassword = await bcrpty.compare(newPassword, admin.password)
             if (reusedPassword) {
-                return responseReturn(res, 400, { message: 'New password must be different from your current password' })
+                return responseReturn(res, 400, { message: 'The new password must be different from your current password.' })
             }
 
             admin.password = await bcrpty.hash(newPassword, 10)
@@ -594,7 +594,7 @@ class authControllers {
 
             return responseReturn(res, 200, { message: 'Password changed successfully. Please login again.' })
         } catch (error) {
-            return responseReturn(res, 500, { message: 'Unable to change password' })
+            return responseReturn(res, 500, { message: 'We could not change your password. Please try again.' })
         }
     }
 
@@ -603,11 +603,11 @@ class authControllers {
 
         try {
             if (req.role !== 'admin') {
-                return responseReturn(res, 403, { message: 'unauthorized' })
+                return responseReturn(res, 403, { message: 'You are not authorized to perform this action.' })
             }
 
             if (req.adminRole !== 'super_admin') {
-                return responseReturn(res, 403, { message: 'Only super admin can create new admin accounts' })
+                return responseReturn(res, 403, { message: 'Only a super admin can create new admin accounts.' })
             }
 
             const username = normalizeText(name)
@@ -615,7 +615,7 @@ class authControllers {
             const adminRole = role === 'super_admin' ? 'super_admin' : 'admin'
 
             if (!username || !normalizedEmail || !password) {
-                return responseReturn(res, 400, { message: 'Username, email and password are required' })
+                return responseReturn(res, 400, { message: 'Username, email address, and password are required.' })
             }
 
             if (!isStrongPassword(password)) {
@@ -624,14 +624,14 @@ class authControllers {
 
             const existingAdminByEmail = await adminModel.findOne({ email: normalizedEmail })
             if (existingAdminByEmail) {
-                return responseReturn(res, 409, { message: 'Email already exists' })
+                return responseReturn(res, 409, { message: 'An account with this email address already exists.' })
             }
 
             const existingAdminByName = await adminModel.findOne({
                 name: { $regex: new RegExp(`^${escapeRegex(username)}$`, 'i') }
             })
             if (existingAdminByName) {
-                return responseReturn(res, 409, { message: 'Username already exists' })
+                return responseReturn(res, 409, { message: 'This username is already in use.' })
             }
 
             const admin = await adminModel.create({
@@ -660,7 +660,7 @@ class authControllers {
                 }
             })
         } catch (error) {
-            return responseReturn(res, 500, { message: 'Unable to create admin account' })
+            return responseReturn(res, 500, { message: 'We could not create the admin account. Please try again.' })
         }
     }
 
@@ -669,11 +669,11 @@ class authControllers {
 
         try {
             if (req.role !== 'admin') {
-                return responseReturn(res, 403, { message: 'unauthorized' })
+                return responseReturn(res, 403, { message: 'You are not authorized to perform this action.' })
             }
 
             if (!username) {
-                return responseReturn(res, 400, { message: 'Username is required' })
+                return responseReturn(res, 400, { message: 'Username is required.' })
             }
 
             const duplicateAdmin = await adminModel.findOne({
@@ -682,7 +682,7 @@ class authControllers {
             })
 
             if (duplicateAdmin) {
-                return responseReturn(res, 409, { message: 'Username already exists' })
+                return responseReturn(res, 409, { message: 'This username is already in use.' })
             }
 
             const admin = await adminModel.findByIdAndUpdate(
@@ -692,7 +692,7 @@ class authControllers {
             )
 
             if (!admin) {
-                return responseReturn(res, 404, { message: 'Admin not found' })
+                return responseReturn(res, 404, { message: 'Admin account not found.' })
             }
 
             const userInfo = admin.toObject()
@@ -703,7 +703,7 @@ class authControllers {
                 userInfo
             })
         } catch (error) {
-            return responseReturn(res, 500, { message: 'Unable to update username' })
+            return responseReturn(res, 500, { message: 'We could not update the username. Please try again.' })
         }
     }
 
@@ -715,7 +715,7 @@ class authControllers {
             })
             responseReturn(res, 200, { message: 'logout success' })
         } catch (error) {
-            responseReturn(res, 500, { error: error.message })
+            responseReturn(res, 500, { error: 'We could not log you out. Please try again.' })
         }
     }
 }

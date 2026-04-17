@@ -24,7 +24,7 @@ const getCloudinaryPublicId = (url = '') => {
 class bannerController {
     add_banner = async (req, res) => {
         if (req.role !== 'admin') {
-            return responseReturn(res, 401, { message: 'unauthorized' })
+            return responseReturn(res, 401, { message: 'You are not authorized to perform this action.' })
         }
 
         const form = formidable({ multiples: true })
@@ -33,7 +33,7 @@ class bannerController {
             const { image } = files
 
             if (!image) {
-                return responseReturn(res, 400, { message: 'Banner image is required' })
+                return responseReturn(res, 400, { message: 'Please upload a banner image.' })
             }
 
             cloudinary.config({
@@ -49,12 +49,12 @@ class bannerController {
 
                 if (productId) {
                     if (!ObjectId.isValid(productId)) {
-                        return responseReturn(res, 400, { message: 'Valid productId required' })
+                        return responseReturn(res, 400, { message: 'A valid product is required.' })
                     }
 
                     const product = await productModel.findById(productId).select('slug')
                     if (!product) {
-                        return responseReturn(res, 404, { message: 'Product not found' })
+                        return responseReturn(res, 404, { message: 'The requested product could not be found.' })
                     }
 
                     resolvedProductId = productId
@@ -78,7 +78,7 @@ class bannerController {
                 responseReturn(res, 201, { banner, message: "banner add success" })
             } catch (error) {
                 console.log(error)
-                responseReturn(res, 500, { message: error.message })
+                responseReturn(res, 500, { message: 'We could not complete the banner request. Please try again.' })
             }
 
 
@@ -90,19 +90,19 @@ class bannerController {
 
         try {
             if (!productId || !ObjectId.isValid(productId)) {
-                return responseReturn(res, 400, { message: 'Valid productId required' })
+                return responseReturn(res, 400, { message: 'A valid product is required.' })
             }
             const banner = await bannerModel.findOne({ productId: new ObjectId(productId) })
             responseReturn(res, 200, { banner })
         } catch (error) {
             console.log(error)
-            responseReturn(res, 500, { message: error.message })
+            responseReturn(res, 500, { message: 'We could not complete the banner request. Please try again.' })
         }
     }
 
     get_admin_banners = async (req, res) => {
         if (req.role !== 'admin') {
-            return responseReturn(res, 401, { message: 'unauthorized' })
+            return responseReturn(res, 401, { message: 'You are not authorized to perform this action.' })
         }
 
         try {
@@ -110,7 +110,7 @@ class bannerController {
             responseReturn(res, 200, { banners })
         } catch (error) {
             console.log(error)
-            responseReturn(res, 500, { message: error.message })
+            responseReturn(res, 500, { message: 'We could not complete the banner request. Please try again.' })
         }
     }
 
@@ -127,13 +127,13 @@ class bannerController {
             responseReturn(res, 200, { banners })
         } catch (error) {
             console.log(error)
-            responseReturn(res, 500, { message: error.message })
+            responseReturn(res, 500, { message: 'We could not complete the banner request. Please try again.' })
         }
     }
 
     update_banner = async (req, res) => {
         if (req.role !== 'admin') {
-            return responseReturn(res, 401, { message: 'unauthorized' })
+            return responseReturn(res, 401, { message: 'You are not authorized to perform this action.' })
         }
 
         const { bannerId } = req.params
@@ -143,11 +143,11 @@ class bannerController {
             const { image } = files
 
             if (!bannerId || !ObjectId.isValid(bannerId)) {
-                return responseReturn(res, 400, { message: 'Valid bannerId required' })
+                return responseReturn(res, 400, { message: 'A valid banner is required.' })
             }
 
             if (!image) {
-                return responseReturn(res, 400, { message: 'Banner image is required' })
+                return responseReturn(res, 400, { message: 'Please upload a banner image.' })
             }
 
             cloudinary.config({
@@ -160,7 +160,7 @@ class bannerController {
             try {
                 let banner = await bannerModel.findById(bannerId)
                 if (!banner) {
-                    return responseReturn(res, 404, { message: 'Banner not found' })
+                    return responseReturn(res, 404, { message: 'The requested banner could not be found.' })
                 }
 
                 const publicId = getCloudinaryPublicId(banner.banner)
@@ -180,20 +180,20 @@ class bannerController {
 
             } catch (error) {
                 console.log(error)
-                responseReturn(res, 500, { message: error.message })
+                responseReturn(res, 500, { message: 'We could not complete the banner request. Please try again.' })
             }
         })
     }
 
     delete_banner = async (req, res) => {
         if (req.role !== 'admin') {
-            return responseReturn(res, 401, { message: 'unauthorized' })
+            return responseReturn(res, 401, { message: 'You are not authorized to perform this action.' })
         }
 
         const { bannerId } = req.params
 
         if (!bannerId || !ObjectId.isValid(bannerId)) {
-            return responseReturn(res, 400, { message: 'Valid bannerId required' })
+            return responseReturn(res, 400, { message: 'A valid banner is required.' })
         }
 
        cloudinary.config({
@@ -206,7 +206,7 @@ class bannerController {
         try {
             const banner = await bannerModel.findById(bannerId)
             if (!banner) {
-                return responseReturn(res, 404, { message: 'Banner not found' })
+                return responseReturn(res, 404, { message: 'The requested banner could not be found.' })
             }
 
             const publicId = getCloudinaryPublicId(banner.banner)
@@ -219,7 +219,7 @@ class bannerController {
             responseReturn(res, 200, { message: 'banner delete success', bannerId })
         } catch (error) {
             console.log(error)
-            responseReturn(res, 500, { message: error.message })
+            responseReturn(res, 500, { message: 'We could not complete the banner request. Please try again.' })
         }
     }
 }

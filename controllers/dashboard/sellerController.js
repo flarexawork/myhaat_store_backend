@@ -102,7 +102,7 @@ class sellerController {
                 sellers: sellers.map(withVerificationStatus)
             })
         } catch (error) {
-            responseReturn(res, 500, { error: error.message })
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
     get_seller = async (req, res) => {
@@ -112,7 +112,7 @@ class sellerController {
             const seller = await sellerModel.findById(sellerId)
             responseReturn(res, 200, { seller: seller ? withVerificationStatus(seller) : null })
         } catch (error) {
-            responseReturn(res, 500, { error: error.message })
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -122,7 +122,7 @@ class sellerController {
             const seller = await sellerModel.findById(sellerId)
 
             if (!seller) {
-                return responseReturn(res, 404, { error: 'Seller not found' })
+                return responseReturn(res, 404, { error: 'Seller account not found.' })
             }
 
             const trimmedRemark = String(remark || '').trim()
@@ -131,7 +131,7 @@ class sellerController {
                 : buildSellerStatusUpdate({ nextAccountStatus: ACCOUNT_STATUS.INACTIVE, remark: trimmedRemark })
 
             if (sellerUpdate.accountStatus === ACCOUNT_STATUS.INACTIVE && !trimmedRemark) {
-                return responseReturn(res, 400, { error: 'Remark is required when deactivating a seller' })
+                return responseReturn(res, 400, { error: 'A remark is required when deactivating a seller.' })
             }
 
             await sellerModel.findByIdAndUpdate(sellerId, sellerUpdate)
@@ -149,7 +149,7 @@ class sellerController {
                 message: 'seller status update success'
             })
         } catch (error) {
-            responseReturn(res, 500, { error: error.message })
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -161,7 +161,7 @@ class sellerController {
             const seller = await sellerModel.findById(sellerId)
 
             if (!seller) {
-                return responseReturn(res, 404, { error: 'Seller not found' })
+                return responseReturn(res, 404, { error: 'Seller account not found.' })
             }
 
             const currentAccountStatus = normalizeAccountStatus(seller)
@@ -170,7 +170,7 @@ class sellerController {
                 : ACCOUNT_STATUS.ACTIVE
 
             if (nextAccountStatus === ACCOUNT_STATUS.INACTIVE && !trimmedRemark) {
-                return responseReturn(res, 400, { error: 'Remark is required when deactivating a seller' })
+                return responseReturn(res, 400, { error: 'A remark is required when deactivating a seller.' })
             }
 
             const sellerUpdate = buildSellerStatusUpdate({
@@ -195,7 +195,7 @@ class sellerController {
                     : 'Seller deactivated successfully'
             })
         } catch (error) {
-            return responseReturn(res, 500, { error: error.message })
+            return responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 

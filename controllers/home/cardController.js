@@ -35,7 +35,7 @@ class cardController {
             })
             if (product) {
                 responseReturn(res, 404, {
-                    error: 'Product already added to card'
+                    error: 'This item is already in your cart.'
                 })
             } else {
                 const product = await cardModel.create({
@@ -196,15 +196,17 @@ class cardController {
 
     add_wishlist = async (req, res) => {
         const {
-            slug
+            userId,
+            productId
         } = req.body
         try {
             const product = await wishlistModel.findOne({
-                slug
+                userId,
+                productId
             })
             if (product) {
                 responseReturn(res, 404, {
-                    error: 'Allready added'
+                    error: 'This item is already in your wishlist.'
                 })
             } else {
                 await wishlistModel.create(req.body)
@@ -213,33 +215,25 @@ class cardController {
                 })
             }
         } catch (error) {
+            if (error.code === 11000) {
+                return responseReturn(res, 404, {
+                    error: 'This item is already in your wishlist.'
+                })
+            }
             console.log(error.message)
         }
     }
 
     get_wishlist = async (req, res) => {
-        const {
-            userId
-        } = req.params;
+        const userId = req.id || req.params.userId
         try {
-            const activeSellers = await getActiveSellers();
             const wishlists = await wishlistModel.find({
                 userId
             })
-            
-            // Filter wishlists to only include products from active sellers
-            const filteredWishlists = [];
-            for (const wishlist of wishlists) {
-                const product = await productModel.findById(wishlist.productId);
-                
-                if (product && activeSellers.includes(product.sellerId.toString())) {
-                    filteredWishlists.push(wishlist);
-                }
-            }
-            
+
             responseReturn(res, 200, {
-                wishlistCount: filteredWishlists.length,
-                wishlists: filteredWishlists
+                wishlistCount: wishlists.length,
+                wishlists
             })
         } catch (error) {
             console.log(error.message)

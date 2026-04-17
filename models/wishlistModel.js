@@ -35,4 +35,6 @@ const wishlistSchema = new Schema({
     }
 }, { timestamps: true })
 
+wishlistSchema.index({ userId: 1, productId: 1 }, { unique: true })
+
 module.exports = model('wishlists', wishlistSchema)

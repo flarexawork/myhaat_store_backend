@@ -101,11 +101,11 @@ class orderController {
             } = req.body
 
             if (!payment_type) {
-                return responseReturn(res, 400, { message: 'payment_type required' })
+                return responseReturn(res, 400, { message: 'Payment method is required.' })
             }
 
             if (!userId || !products?.length || !shippingInfo) {
-                return responseReturn(res, 400, { message: 'Invalid order data' })
+                return responseReturn(res, 400, { message: 'The order details are invalid.' })
             }
 
             const requestedProductTotal = Number(price)
@@ -130,11 +130,11 @@ class orderController {
             })
 
             if (!checkoutSummary.seller_summaries.length) {
-                return responseReturn(res, 400, { message: 'Invalid order amount' })
+                return responseReturn(res, 400, { message: 'The order amount is invalid.' })
             }
 
             if (checkoutSummary.product_total < 0 || checkoutSummary.final_total < 0) {
-                return responseReturn(res, 400, { message: 'Invalid order amount' })
+                return responseReturn(res, 400, { message: 'The order amount is invalid.' })
             }
 
             const shouldTraceFinancials = String(process.env.ORDER_DEBUG_TRACE || '').trim().toLowerCase() === 'true'
@@ -298,7 +298,7 @@ class orderController {
                     )
 
                     return responseReturn(res, 500, {
-                        message: 'Payment gateway error'
+                        message: 'We could not process the payment. Please try again.'
                     })
                 }
             }
@@ -312,7 +312,7 @@ class orderController {
 
         } catch (error) {
             console.log("place_order error:", error)
-            return responseReturn(res, 500, { message: 'order failed' })
+            return responseReturn(res, 500, { message: 'We could not place the order. Please try again.' })
         }
     }
 
@@ -338,21 +338,21 @@ class orderController {
             const { orderId } = req.body
 
             if (!orderId || !ObjectId.isValid(orderId)) {
-                return responseReturn(res, 400, { message: 'Valid orderId required' })
+                return responseReturn(res, 400, { message: 'A valid order ID is required.' })
             }
 
             const order = await this.load_customer_order(orderId)
 
             if (!order) {
-                return responseReturn(res, 404, { message: 'Order not found' })
+                return responseReturn(res, 404, { message: 'The requested order could not be found.' })
             }
 
             if (order.payment_type !== 'online') {
-                return responseReturn(res, 400, { message: 'This order is not eligible for online payment' })
+                return responseReturn(res, 400, { message: 'This order cannot be paid online.' })
             }
 
             if (normalizeOrderStatus(order.order_status) === 'REJECT' || normalizeDeliveryStatus(order.delivery_status) === 'cancelled') {
-                return responseReturn(res, 400, { message: 'Order already cancelled' })
+                return responseReturn(res, 400, { message: 'This order has already been canceled.' })
             }
 
             if (order.payment_status === 'paid') {
@@ -378,7 +378,7 @@ class orderController {
 
         } catch (error) {
             console.log('create_payment error:', error)
-            return responseReturn(res, 500, { message: 'Unable to create payment order' })
+            return responseReturn(res, 500, { message: 'We could not create the payment request. Please try again.' })
         }
     }
 
@@ -399,13 +399,13 @@ class orderController {
                 !razorpay_payment_id ||
                 !razorpay_signature
             ) {
-                return responseReturn(res, 400, { message: 'Incomplete payment data' })
+                return responseReturn(res, 400, { message: 'Payment information is incomplete.' })
             }
 
             const keySecret = process.env.RAZORPAY_KEY_SECRET
 
             if (!keySecret) {
-                return responseReturn(res, 500, { message: 'Razorpay key secret missing' })
+                return responseReturn(res, 500, { message: 'Payment service is not available right now. Please try again later.' })
             }
 
             const generatedSignature = crypto
@@ -414,25 +414,25 @@ class orderController {
                 .digest('hex')
 
             if (generatedSignature !== razorpay_signature) {
-                return responseReturn(res, 400, { message: 'Invalid Razorpay signature' })
+                return responseReturn(res, 400, { message: 'Payment verification failed. Please try again.' })
             }
 
             const order = await this.load_customer_order(orderId)
 
             if (!order) {
-                return responseReturn(res, 404, { message: 'Order not found' })
+                return responseReturn(res, 404, { message: 'The requested order could not be found.' })
             }
 
             if (order.payment_type !== 'online' && order.payment_type !== 'cod') {
-                return responseReturn(res, 400, { message: 'This order payment type is not supported' })
+                return responseReturn(res, 400, { message: 'This payment method is not supported for this order.' })
             }
 
             if (normalizeOrderStatus(order.order_status) === 'REJECT' || normalizeDeliveryStatus(order.delivery_status) === 'cancelled') {
-                return responseReturn(res, 400, { message: 'Order already cancelled' })
+                return responseReturn(res, 400, { message: 'This order has already been canceled.' })
             }
 
             if (order.razorpay_order_id !== razorpay_order_id) {
-                return responseReturn(res, 400, { message: 'Razorpay order mismatch' })
+                return responseReturn(res, 400, { message: 'Payment details did not match this order.' })
             }
 
             if (order.payment_status === 'paid') {
@@ -445,7 +445,7 @@ class orderController {
 
         } catch (error) {
             console.log('verify_online_payment error:', error)
-            return responseReturn(res, 500, { message: 'Payment verification failed' })
+            return responseReturn(res, 500, { message: 'We could not verify the payment. Please try again.' })
         }
     }
 
@@ -454,28 +454,28 @@ class orderController {
             const { orderId } = req.params
 
             if (!orderId || !ObjectId.isValid(orderId)) {
-                return responseReturn(res, 400, { message: 'Valid orderId required' })
+                return responseReturn(res, 400, { message: 'A valid order ID is required.' })
             }
 
             const order = await this.load_customer_order(orderId)
 
             if (!order) {
-                return responseReturn(res, 404, { message: 'Order not found' })
+                return responseReturn(res, 404, { message: 'The requested order could not be found.' })
             }
 
             if (order.payment_type !== 'cod') {
-                return responseReturn(res, 400, { message: 'This order is not COD type' })
+                return responseReturn(res, 400, { message: 'This order is not a cash-on-delivery order.' })
             }
 
             if (normalizeOrderStatus(order.order_status) === 'REJECT' || normalizeDeliveryStatus(order.delivery_status) === 'cancelled') {
-                return responseReturn(res, 400, { message: 'Order already cancelled' })
+                return responseReturn(res, 400, { message: 'This order has already been canceled.' })
             }
 
             await this.update_order_payment_status(orderId, 'cod')
             return responseReturn(res, 200, { message: 'COD confirmed' })
         } catch (error) {
             console.log('cod_confirm error:', error)
-            return responseReturn(res, 500, { message: 'Unable to confirm COD' })
+            return responseReturn(res, 500, { message: 'We could not confirm cash on delivery. Please try again.' })
         }
     }
 
@@ -491,7 +491,7 @@ class orderController {
             const signatureHeader = req.headers["x-razorpay-signature"]
 
             if (!secret || !rawBody || !signatureHeader) {
-                return res.status(400).json({ message: "Webhook data missing" })
+                return res.status(400).json({ message: "Required webhook data is missing." })
             }
 
             const razorpaySignature = Array.isArray(signatureHeader)
@@ -510,7 +510,7 @@ class orderController {
                 generatedBuffer.length !== receivedBuffer.length ||
                 !crypto.timingSafeEqual(generatedBuffer, receivedBuffer)
             ) {
-                return res.status(400).json({ message: "Invalid signature" })
+                return res.status(400).json({ message: "The request signature is invalid." })
             }
 
             const event = req.body.event
@@ -531,7 +531,7 @@ class orderController {
                 }
 
                 if (!existingOrder) {
-                    return res.status(404).json({ message: "Order not found" })
+                    return res.status(404).json({ message: "The requested order could not be found." })
                 }
 
                 if (existingOrder.payment_status !== "pending") {
@@ -542,7 +542,7 @@ class orderController {
                     normalizeOrderStatus(existingOrder.order_status) === 'REJECT' ||
                     normalizeDeliveryStatus(existingOrder.delivery_status) === 'cancelled'
                 ) {
-                    return res.status(409).json({ message: 'Order already cancelled' })
+                    return res.status(409).json({ message: 'This order has already been canceled.' })
                 }
 
                 await this.update_order_payment_status(
@@ -583,7 +583,7 @@ class orderController {
 
         } catch (error) {
             console.log("Webhook error:", error)
-            return res.status(500).json({ message: "Verification failed" })
+            return res.status(500).json({ message: "Request verification failed." })
         }
     }
 
@@ -683,7 +683,7 @@ class orderController {
 
         try {
             if (!orderId || !ObjectId.isValid(orderId)) {
-                return responseReturn(res, 400, { message: 'Valid orderId required' })
+                return responseReturn(res, 400, { message: 'A valid order ID is required.' })
             }
             const order = await this.load_customer_order(orderId)
             const responseTime = new Date()
@@ -702,33 +702,33 @@ class orderController {
 
         try {
             if (!orderId || !ObjectId.isValid(orderId)) {
-                return responseReturn(res, 400, { message: 'Valid orderId required' })
+                return responseReturn(res, 400, { message: 'A valid order ID is required.' })
             }
 
             if (!customerId || !ObjectId.isValid(customerId)) {
-                return responseReturn(res, 400, { message: 'Valid customerId required' })
+                return responseReturn(res, 400, { message: 'A valid customer ID is required.' })
             }
 
             const order = await this.load_customer_order(orderId)
 
             if (!order) {
-                return responseReturn(res, 404, { message: 'Order not found' })
+                return responseReturn(res, 404, { message: 'The requested order could not be found.' })
             }
 
             if (String(order.customerId) !== String(customerId)) {
-                return responseReturn(res, 401, { message: 'unauthorized' })
+                return responseReturn(res, 401, { message: 'You are not authorized to perform this action.' })
             }
 
             if (order.delivery_status === 'cancelled') {
-                return responseReturn(res, 400, { message: 'Order already cancelled' })
+                return responseReturn(res, 400, { message: 'This order has already been canceled.' })
             }
 
             if (normalizeOrderStatus(order.order_status) === 'REJECT') {
-                return responseReturn(res, 400, { message: 'Order already rejected' })
+                return responseReturn(res, 400, { message: 'This order has already been rejected.' })
             }
 
             if (normalizeOrderStatus(order.order_status) === 'ACCEPT') {
-                return responseReturn(res, 400, { message: 'Order already accepted, cannot cancel' })
+                return responseReturn(res, 400, { message: 'This order has already been accepted and cannot be canceled.' })
             }
 
             const acceptedSubOrder = await authOrderModel.findOne({
@@ -737,7 +737,7 @@ class orderController {
             })
 
             if (acceptedSubOrder) {
-                return responseReturn(res, 400, { message: 'Order already accepted, cannot cancel' })
+                return responseReturn(res, 400, { message: 'This order has already been accepted and cannot be canceled.' })
             }
 
             await customerOrder.findByIdAndUpdate(orderId, {
@@ -756,7 +756,7 @@ class orderController {
             responseReturn(res, 200, { message: 'Order cancelled successfully' })
         } catch (error) {
             console.log(error)
-            responseReturn(res, 500, { message: 'Internal server error' })
+            responseReturn(res, 500, { message: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -836,7 +836,7 @@ class orderController {
 
         try {
             if (!orderId || !ObjectId.isValid(orderId)) {
-                return responseReturn(res, 400, { message: 'Valid orderId required' })
+                return responseReturn(res, 400, { message: 'A valid order ID is required.' })
             }
 
             const order = await customerOrder.aggregate([
@@ -878,14 +878,14 @@ class orderController {
             if (req.role !== 'admin') {
                 return responseReturn(res, 401, {
                     success: false,
-                    message: 'unauthorized'
+                    message: 'You are not authorized to perform this action.'
                 })
             }
 
             if (!orderId || !ObjectId.isValid(orderId)) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Invalid status transition'
+                    message: 'This status change is not allowed.'
                 })
             }
 
@@ -894,14 +894,14 @@ class orderController {
             if (!targetOrder) {
                 return responseReturn(res, 404, {
                     success: false,
-                    message: 'Order not found'
+                    message: 'The requested order could not be found.'
                 })
             }
 
             if (!incomingDeliveryStatus && !incomingOrderStatus) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Invalid status transition'
+                    message: 'This status change is not allowed.'
                 })
             }
 
@@ -912,7 +912,7 @@ class orderController {
                 if (!isValidOrderStatus(normalizedOrderStatus) && normalizedOrderStatus !== 'PENDING') {
                     return responseReturn(res, 400, {
                         success: false,
-                        message: 'Invalid status transition'
+                        message: 'This status change is not allowed.'
                     })
                 }
                 updateData.order_status = normalizedOrderStatus
@@ -923,7 +923,7 @@ class orderController {
                 if (!isValidDeliveryStatus(normalizedDeliveryStatus)) {
                     return responseReturn(res, 400, {
                         success: false,
-                        message: 'Invalid status transition'
+                        message: 'This status change is not allowed.'
                     })
                 }
                 updateData.delivery_status = normalizedDeliveryStatus
@@ -979,7 +979,7 @@ class orderController {
             console.log(error)
             responseReturn(res, 500, {
                 success: false,
-                message: 'Internal server error'
+                message: 'Something went wrong. Please try again later.'
             })
         }
     }
@@ -1022,7 +1022,7 @@ class orderController {
 
         try {
             if (!orderId || !ObjectId.isValid(orderId)) {
-                return responseReturn(res, 400, { message: 'Valid orderId required' })
+                return responseReturn(res, 400, { message: 'A valid order ID is required.' })
             }
             const order = await authOrderModel.findById(orderId)
             responseReturn(res, 200, {
@@ -1051,7 +1051,7 @@ class orderController {
             if (!orderId || !ObjectId.isValid(orderId)) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Invalid status transition'
+                    message: 'This status change is not allowed.'
                 })
             }
 
@@ -1060,7 +1060,7 @@ class orderController {
             if (!sellerOrder) {
                 return responseReturn(res, 404, {
                     success: false,
-                    message: 'Order not found'
+                    message: 'The requested order could not be found.'
                 })
             }
 
@@ -1073,7 +1073,7 @@ class orderController {
             if (!canAccess) {
                 return responseReturn(res, 401, {
                     success: false,
-                    message: 'unauthorized'
+                    message: 'You are not authorized to perform this action.'
                 })
             }
 
@@ -1109,7 +1109,7 @@ class orderController {
         } catch (error) {
             responseReturn(res, 500, {
                 success: false,
-                message: 'Internal server error'
+                message: 'Something went wrong. Please try again later.'
             })
         }
     }
@@ -1131,7 +1131,7 @@ class orderController {
             if (!orderId || !ObjectId.isValid(orderId)) {
                 return responseReturn(res, 400, {
                     success: false,
-                    message: 'Invalid status transition'
+                    message: 'This status change is not allowed.'
                 })
             }
 
@@ -1140,7 +1140,7 @@ class orderController {
             if (!sellerOrder) {
                 return responseReturn(res, 404, {
                     success: false,
-                    message: 'Order not found'
+                    message: 'The requested order could not be found.'
                 })
             }
 
@@ -1153,7 +1153,7 @@ class orderController {
             if (!canAccess) {
                 return responseReturn(res, 401, {
                     success: false,
-                    message: 'unauthorized'
+                    message: 'You are not authorized to perform this action.'
                 })
             }
 
@@ -1184,7 +1184,7 @@ class orderController {
         } catch (error) {
             responseReturn(res, 500, {
                 success: false,
-                message: 'Internal server error'
+                message: 'Something went wrong. Please try again later.'
             })
         }
     }
