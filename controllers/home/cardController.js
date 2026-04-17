@@ -225,28 +225,15 @@ class cardController {
     }
 
     get_wishlist = async (req, res) => {
-        const {
-            userId
-        } = req.params;
+        const userId = req.id || req.params.userId
         try {
-            const activeSellers = await getActiveSellers();
             const wishlists = await wishlistModel.find({
                 userId
             })
-            
-            // Filter wishlists to only include products from active sellers
-            const filteredWishlists = [];
-            for (const wishlist of wishlists) {
-                const product = await productModel.findById(wishlist.productId);
-                
-                if (product && activeSellers.includes(product.sellerId.toString())) {
-                    filteredWishlists.push(wishlist);
-                }
-            }
-            
+
             responseReturn(res, 200, {
-                wishlistCount: filteredWishlists.length,
-                wishlists: filteredWishlists
+                wishlistCount: wishlists.length,
+                wishlists
             })
         } catch (error) {
             console.log(error.message)
