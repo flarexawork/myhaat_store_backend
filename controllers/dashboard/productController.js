@@ -1,10 +1,20 @@
 const formidable = require('formidable')
 const cloudinary = require('cloudinary').v2
 const productModel = require('../../models/productModel');
+const categoryModel = require('../../models/categoryModel');
 const sellerModel = require('../../models/sellerModel')
 const { responseReturn } = require('../../utiles/response');
 const authOrderModel = require('../../models/authOrder');
 const { getActiveSellers } = require('../../utiles/activeSellerFilter');
+const {
+    normalizePincodes,
+    normalizeProductVariations,
+    normalizeVariantCombinations,
+    parseJsonField,
+    validatePincode
+} = require('../../utiles/productOptions');
+
+const getFormValue = (value) => Array.isArray(value) ? value[0] : value
 
 class productController {
 
@@ -13,8 +23,20 @@ class productController {
         const form = formidable({ multiples: true })
 
         form.parse(req, async (err, field, files) => {
-            let { name, category, description, stock, price, discount, shopName, brand } = field;
+            let { name, category, categoryId, description, stock, price, discount, shopName, brand, variations, variantCombinations, deliveryPincodes } = field;
             let { images } = files;
+            name = getFormValue(name)
+            category = getFormValue(category)
+            categoryId = getFormValue(categoryId)
+            description = getFormValue(description)
+            stock = getFormValue(stock)
+            price = getFormValue(price)
+            discount = getFormValue(discount)
+            shopName = getFormValue(shopName)
+            brand = getFormValue(brand)
+            variations = getFormValue(variations)
+            variantCombinations = getFormValue(variantCombinations)
+            deliveryPincodes = getFormValue(deliveryPincodes)
             name = name.trim()
             name = name.replace(/[^a-zA-Z0-9\s._-]/g, '')
 
@@ -40,6 +62,27 @@ class productController {
             })
 
             try {
+                let resolvedCategoryId = categoryId || null
+                if (resolvedCategoryId) {
+                    const categoryDoc = await categoryModel.findById(resolvedCategoryId)
+                    if (!categoryDoc) {
+                        return responseReturn(res, 400, { error: 'A valid category is required.' })
+                    }
+                    category = categoryDoc.name
+                }
+
+                const productVariations = normalizeProductVariations(parseJsonField(variations, []))
+                const productVariants = normalizeVariantCombinations(parseJsonField(variantCombinations, []), stock)
+                const pincodes = normalizePincodes(parseJsonField(deliveryPincodes, []))
+
+                if (pincodes.some((pincode) => !validatePincode(pincode))) {
+                    return responseReturn(res, 400, { error: 'Please enter valid 6-digit pincodes only.' })
+                }
+
+                if (productVariations.length && !productVariants.length) {
+                    return responseReturn(res, 400, { error: 'Please configure at least one product variation combination.' })
+                }
+
                 let allImageUrl = [];
 
                 for (let i = 0; i < images.length; i++) {
@@ -52,6 +95,7 @@ class productController {
                     name,
                     slug,
                     shopName,
+                    categoryId: resolvedCategoryId,
                     category: category.trim(),
                     description: description.trim(),
                     stock: parseInt(stock),
@@ -59,6 +103,9 @@ class productController {
                     discount: parseInt(discount),
                     images: allImageUrl,
                     brand: brand.trim(),
+                    variations: productVariations,
+                    variantCombinations: productVariants,
+                    deliveryPincodes: pincodes,
                     approval_status: 'pending'
 
                 })
@@ -145,7 +192,7 @@ class productController {
     }
     product_update = async (req, res) => {
         const { id } = req
-        let { name, description, discount, price, brand, productId, stock } = req.body;
+        let { name, description, discount, price, brand, productId, stock, category, categoryId, variations, variantCombinations, deliveryPincodes } = req.body;
         name = name.trim()
         name = name.replace(/[^a-zA-Z0-9\s._-]/g, '')
         const slug = name.toLowerCase().trim().replace(/\s+/g, '-')
@@ -164,8 +211,43 @@ class productController {
                 return responseReturn(res, 400, { error: 'This approved product cannot be edited by the seller.' })
             }
 
+            let resolvedCategory = category || product.category
+            let resolvedCategoryId = categoryId || product.categoryId || null
+            if (categoryId) {
+                const categoryDoc = await categoryModel.findById(categoryId)
+                if (!categoryDoc) {
+                    return responseReturn(res, 400, { error: 'A valid category is required.' })
+                }
+                resolvedCategory = categoryDoc.name
+                resolvedCategoryId = categoryDoc._id
+            }
+
+            const productVariations = normalizeProductVariations(variations || [])
+            const productVariants = normalizeVariantCombinations(variantCombinations || [], stock)
+            const pincodes = normalizePincodes(deliveryPincodes || [])
+
+            if (pincodes.some((pincode) => !validatePincode(pincode))) {
+                return responseReturn(res, 400, { error: 'Please enter valid 6-digit pincodes only.' })
+            }
+
+            if (productVariations.length && !productVariants.length) {
+                return responseReturn(res, 400, { error: 'Please configure at least one product variation combination.' })
+            }
+
             await productModel.findByIdAndUpdate(productId, {
-                name, description, discount, price, brand, productId, stock, slug
+                name,
+                description,
+                discount,
+                price,
+                brand,
+                productId,
+                stock,
+                slug,
+                category: resolvedCategory,
+                categoryId: resolvedCategoryId,
+                variations: productVariations,
+                variantCombinations: productVariants,
+                deliveryPincodes: pincodes
             })
             const updatedProduct = await productModel.findById(productId)
             responseReturn(res, 200, { product: updatedProduct, message: 'product update success' })

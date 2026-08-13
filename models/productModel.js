@@ -18,6 +18,11 @@ const productSchema = new Schema({
         type: String,
         required: true
     },
+    categoryId: {
+        type: Schema.ObjectId,
+        ref: 'categorys',
+        default: null
+    },
     brand: {
         type: String,
         required: true
@@ -60,6 +65,18 @@ const productSchema = new Schema({
         type: Array,
         required: true
     },
+    variations: {
+        type: Array,
+        default: []
+    },
+    variantCombinations: {
+        type: Array,
+        default: []
+    },
+    deliveryPincodes: {
+        type: [String],
+        default: []
+    },
     rating: {
         type: Number,
         default: 0
@@ -79,5 +96,8 @@ productSchema.index({
         description: 2
     }
 })
+
+productSchema.index({ categoryId: 1 })
+productSchema.index({ deliveryPincodes: 1 })
 
 module.exports = model('products', productSchema)

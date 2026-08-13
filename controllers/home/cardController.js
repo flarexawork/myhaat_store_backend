@@ -12,14 +12,39 @@ const {
 const { getActiveSellers } = require('../../utiles/activeSellerFilter')
 const { getOrderShippingFee } = require('../../utiles/shippingConfig')
 const { getDiscountedUnitPrice } = require('../../utiles/orderFinancials')
+const { validateSelectedVariation } = require('../../utiles/productOptions')
 class cardController {
     add_to_card = async (req, res) => {
         const {
             userId,
             productId,
-            quantity
+            quantity,
+            selectedVariation
         } = req.body
         try {
+            const productInfo = await productModel.findById(productId)
+
+            if (!productInfo) {
+                return responseReturn(res, 404, {
+                    error: 'The requested product could not be found.'
+                })
+            }
+
+            const variationValidation = validateSelectedVariation(productInfo, selectedVariation)
+            if (!variationValidation.valid) {
+                return responseReturn(res, 400, {
+                    error: variationValidation.message
+                })
+            }
+
+            const resolvedVariantKey = variationValidation.selectedVariation?.variantKey || ''
+            const availableStock = variationValidation.variant?.stock ?? productInfo.stock
+            if (Number(quantity) > Number(availableStock)) {
+                return responseReturn(res, 400, {
+                    error: 'Selected quantity is not available for this product.'
+                })
+            }
+
             const product = await cardModel.findOne({
                 $and: [{
                         productId: {
@@ -29,6 +54,11 @@ class cardController {
                     {
                         userId: {
                             $eq: userId
+                        }
+                    },
+                    {
+                        variantKey: {
+                            $eq: resolvedVariantKey
                         }
                     }
                 ]
@@ -41,7 +71,9 @@ class cardController {
                 const product = await cardModel.create({
                     userId,
                     productId,
-                    quantity
+                    quantity,
+                    selectedVariation: variationValidation.selectedVariation,
+                    variantKey: resolvedVariantKey
                 })
                 responseReturn(res, 201, {
                     message: 'Add to card success',
@@ -82,18 +114,31 @@ class cardController {
             let buy_product_item = 0
             let calculatePrice = 0;
             let card_product_count = 0;
-            const outOfStockProduct = card_products.filter(p => p.products[0].stock < p.quantity)
+            const outOfStockProduct = card_products.filter(p => {
+                const variant = (p.products[0].variantCombinations || []).find(v => v.variantKey === p.variantKey)
+                const stock = variant?.stock ?? p.products[0].stock
+                return stock < p.quantity
+            })
             for (let i = 0; i < outOfStockProduct.length; i++) {
                 card_product_count = card_product_count + outOfStockProduct[i].quantity
             }
-            const stockProduct = card_products.filter(p => p.products[0].stock >= p.quantity)
+            const stockProduct = card_products.filter(p => {
+                const variant = (p.products[0].variantCombinations || []).find(v => v.variantKey === p.variantKey)
+                const stock = variant?.stock ?? p.products[0].stock
+                return stock >= p.quantity
+            })
             for (let i = 0; i < stockProduct.length; i++) {
                 const {
                     quantity
                 } = stockProduct[i]
                 card_product_count = card_product_count + quantity
                 buy_product_item = buy_product_item + quantity
-                const discountedPrice = getDiscountedUnitPrice(stockProduct[i].products[0])
+                const variant = (stockProduct[i].products[0].variantCombinations || []).find(v => v.variantKey === stockProduct[i].variantKey)
+                const pricedProduct = {
+                    ...stockProduct[i].products[0],
+                    price: variant?.price || stockProduct[i].products[0].price
+                }
+                const discountedPrice = getDiscountedUnitPrice(pricedProduct)
                 calculatePrice = calculatePrice + quantity * discountedPrice
             }
             let p = []
@@ -103,7 +148,12 @@ class cardController {
                 for (let j = 0; j < stockProduct.length; j++) {
                     const tempProduct = stockProduct[j].products[0]
                     if (unique[i] === tempProduct.sellerId.toString()) {
-                        const pri = getDiscountedUnitPrice(tempProduct)
+                        const variant = (tempProduct.variantCombinations || []).find(v => v.variantKey === stockProduct[j].variantKey)
+                        const productInfo = {
+                            ...tempProduct,
+                            price: variant?.price || tempProduct.price
+                        }
+                        const pri = getDiscountedUnitPrice(productInfo)
                         price = price + pri * stockProduct[j].quantity
                         p[i] = {
                             sellerId: unique[i],
@@ -114,12 +164,16 @@ class cardController {
                                 {
                                     _id: stockProduct[j]._id,
                                     quantity: stockProduct[j].quantity,
-                                    productInfo: tempProduct
+                                    selectedVariation: stockProduct[j].selectedVariation,
+                                    variantKey: stockProduct[j].variantKey,
+                                    productInfo
                                 }
                             ] : [{
                                 _id: stockProduct[j]._id,
                                 quantity: stockProduct[j].quantity,
-                                productInfo: tempProduct
+                                selectedVariation: stockProduct[j].selectedVariation,
+                                variantKey: stockProduct[j].variantKey,
+                                productInfo
 
                             }]
                         }
@@ -164,6 +218,16 @@ class cardController {
             const {
                 quantity
             } = product
+            const productInfo = await productModel.findById(product.productId)
+            const variant = (productInfo?.variantCombinations || []).find(v => v.variantKey === product.variantKey)
+            const availableStock = variant?.stock ?? productInfo?.stock ?? quantity
+
+            if (quantity + 1 > availableStock) {
+                return responseReturn(res, 400, {
+                    error: 'Selected quantity is not available for this product.'
+                })
+            }
+
             await cardModel.findByIdAndUpdate(card_id, {
                 quantity: quantity + 1
             })

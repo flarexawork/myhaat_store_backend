@@ -12,7 +12,17 @@ const cardSchema = new Schema({
     quantity : {
         type : Number,
         required : true
+    },
+    selectedVariation: {
+        type: Object,
+        default: null
+    },
+    variantKey: {
+        type: String,
+        default: ''
     }
 },{timestamps : true})
+
+cardSchema.index({ userId: 1, productId: 1, variantKey: 1 })
 
 module.exports = model('cardProducts',cardSchema)

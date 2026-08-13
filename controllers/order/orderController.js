@@ -1,6 +1,7 @@
 const authOrderModel = require('../../models/authOrder')
 const customerOrder = require('../../models/customerOrder')
 const cardModel = require('../../models/cardModel')
+const productModel = require('../../models/productModel')
 const myShopWallet = require('../../models/myShopWallet')
 const sellerWallet = require('../../models/sellerWallet')
 const {
@@ -29,6 +30,10 @@ const {
 const moment = require('moment')
 const crypto = require('crypto')
 const Razorpay = require('razorpay')
+const {
+    isProductDeliverableToPincode,
+    validateSelectedVariation
+} = require('../../utiles/productOptions')
 
 const razorpay = new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -108,6 +113,10 @@ class orderController {
                 return responseReturn(res, 400, { message: 'The order details are invalid.' })
             }
 
+            if (!/^\d{6}$/.test(String(shippingInfo?.post || '').trim())) {
+                return responseReturn(res, 400, { message: 'A valid 6-digit post code is required.' })
+            }
+
             const requestedProductTotal = Number(price)
             const requestedShippingFee = Number(req.body?.shipping_fee)
             const tempDate = new Date()
@@ -169,6 +178,46 @@ class orderController {
             let cardId = []
             let customerOrderProduct = []
 
+            for (let i = 0; i < products.length; i++) {
+                const pro = products[i].products || []
+
+                for (let j = 0; j < pro.length; j++) {
+                    const productId = pro[j]?.productInfo?._id
+                    if (!productId || !ObjectId.isValid(productId)) {
+                        return responseReturn(res, 400, { message: 'The order contains an invalid product.' })
+                    }
+
+                    const freshProduct = await productModel.findById(productId)
+                    if (!freshProduct) {
+                        return responseReturn(res, 404, { message: 'The requested product could not be found.' })
+                    }
+
+                    const variationValidation = validateSelectedVariation(freshProduct, pro[j].selectedVariation || pro[j].productInfo?.selectedVariation)
+                    if (!variationValidation.valid) {
+                        return responseReturn(res, 400, { message: variationValidation.message })
+                    }
+
+                    const availableStock = variationValidation.variant?.stock ?? freshProduct.stock
+                    if (Number(pro[j].quantity) > Number(availableStock)) {
+                        return responseReturn(res, 400, { message: 'Selected quantity is not available for this product.' })
+                    }
+
+                    const pincodeResult = isProductDeliverableToPincode(freshProduct, shippingInfo.post)
+                    if (!pincodeResult.available) {
+                        return responseReturn(res, 400, {
+                            message: `${freshProduct.name} cannot be delivered to ${shippingInfo.post}.`
+                        })
+                    }
+
+                    pro[j].selectedVariation = variationValidation.selectedVariation
+                    pro[j].productInfo = {
+                        ...freshProduct.toObject(),
+                        price: variationValidation.variant?.price || freshProduct.price,
+                        selectedVariation: variationValidation.selectedVariation
+                    }
+                }
+            }
+
             /* -------- BUILD CUSTOMER PRODUCT LIST -------- */
 
             for (let i = 0; i < products.length; i++) {
@@ -179,7 +228,8 @@ class orderController {
 
                     customerOrderProduct.push({
                         ...pro[j].productInfo,
-                        quantity: pro[j].quantity
+                        quantity: pro[j].quantity,
+                        selectedVariation: pro[j].selectedVariation || pro[j].productInfo?.selectedVariation || null
                     })
 
                     if (pro[j]._id) cardId.push(pro[j]._id)
@@ -226,7 +276,8 @@ class orderController {
                 for (let j = 0; j < pro.length; j++) {
                     storePro.push({
                         ...pro[j].productInfo,
-                        quantity: pro[j].quantity
+                        quantity: pro[j].quantity,
+                        selectedVariation: pro[j].selectedVariation || pro[j].productInfo?.selectedVariation || null
                     })
                 }
 

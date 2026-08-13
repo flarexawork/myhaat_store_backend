@@ -1,5 +1,6 @@
 const categoryModel = require('../../models/categoryModel')
 const productModel = require('../../models/productModel')
+const variationConfigModel = require('../../models/variationConfigModel')
 const queryProducts = require('../../utiles/queryProducts')
 const reviewModel = require('../../models/reviewModel')
 const moment = require('moment')
@@ -13,6 +14,7 @@ const {
     responseReturn
 } = require('../../utiles/response')
 const { getActiveSellers } = require('../../utiles/activeSellerFilter')
+const { isProductDeliverableToPincode } = require('../../utiles/productOptions')
 class homeControllers {
 
     formateProduct = (products) => {
@@ -40,6 +42,27 @@ class homeControllers {
             })
         } catch (error) {
             console.log(error.message)
+        }
+    }
+
+    get_category_variations = async (req, res) => {
+        const { categoryId } = req.params
+
+        if (!categoryId || !ObjectId.isValid(categoryId)) {
+            return responseReturn(res, 400, { error: 'A valid category is required.' })
+        }
+
+        try {
+            const config = await variationConfigModel.findOne({
+                categoryId,
+                isActive: true
+            })
+
+            responseReturn(res, 200, {
+                config: config || { categoryId, variations: [], isActive: true }
+            })
+        } catch (error) {
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 
@@ -133,6 +156,26 @@ class homeControllers {
             })
         } catch (error) {
             console.log(error.message)
+        }
+    }
+
+    check_product_pincode = async (req, res) => {
+        const { productId, pincode } = req.params
+
+        if (!productId || !ObjectId.isValid(productId)) {
+            return responseReturn(res, 400, { error: 'A valid product is required.' })
+        }
+
+        try {
+            const product = await productModel.findById(productId).select('deliveryPincodes')
+            if (!product) {
+                return responseReturn(res, 404, { error: 'The requested product could not be found.' })
+            }
+
+            const result = isProductDeliverableToPincode(product, pincode)
+            responseReturn(res, result.valid ? 200 : 400, result)
+        } catch (error) {
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 

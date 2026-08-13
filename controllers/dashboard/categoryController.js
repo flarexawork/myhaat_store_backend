@@ -1,4 +1,5 @@
 const categoryModel = require('../../models/categoryModel')
+const variationConfigModel = require('../../models/variationConfigModel')
 const { responseReturn } = require('../../utiles/response')
 const cloudinary = require('cloudinary').v2
 const formidable = require('formidable')
@@ -29,6 +30,34 @@ const configureCloudinary = () => cloudinary.config({
     api_secret: process.env.API_SECRET,
     secure: true
 })
+
+const normalizeVariationConfig = (variations = []) => {
+    if (!Array.isArray(variations)) return []
+
+    return variations
+        .map((variation, index) => {
+            const name = String(variation.name || '').trim()
+            const options = Array.isArray(variation.options) ? variation.options : []
+
+            return {
+                name,
+                label: String(variation.label || variation.name || '').trim(),
+                isRequired: variation.isRequired !== false,
+                isActive: variation.isActive !== false,
+                sortOrder: Number(variation.sortOrder || index),
+                options: options
+                    .map((option, optionIndex) => ({
+                        label: String(option.label || option.value || '').trim(),
+                        value: String(option.value || option.label || '').trim(),
+                        group: String(option.group || '').trim(),
+                        isActive: option.isActive !== false,
+                        sortOrder: Number(option.sortOrder || optionIndex)
+                    }))
+                    .filter((option) => option.label && option.value)
+            }
+        })
+        .filter((variation) => variation.name && variation.options.length)
+}
 
 class categoryController {
 
@@ -193,6 +222,60 @@ class categoryController {
             }
         } catch (error) {
             console.log(error.message)
+        }
+    }
+
+    get_category_variations = async (req, res) => {
+        const { categoryId } = req.params
+
+        if (!categoryId || !ObjectId.isValid(categoryId)) {
+            return responseReturn(res, 400, { error: 'A valid category is required.' })
+        }
+
+        try {
+            const config = await variationConfigModel.findOne({ categoryId })
+            responseReturn(res, 200, {
+                config: config || { categoryId, variations: [], isActive: true }
+            })
+        } catch (error) {
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
+        }
+    }
+
+    update_category_variations = async (req, res) => {
+        if (req.role !== 'admin') {
+            return responseReturn(res, 401, { message: 'You are not authorized to perform this action.' })
+        }
+
+        const { categoryId } = req.params
+
+        if (!categoryId || !ObjectId.isValid(categoryId)) {
+            return responseReturn(res, 400, { error: 'A valid category is required.' })
+        }
+
+        try {
+            const category = await categoryModel.findById(categoryId)
+            if (!category) {
+                return responseReturn(res, 404, { error: 'The requested category could not be found.' })
+            }
+
+            const variations = normalizeVariationConfig(req.body?.variations)
+            const config = await variationConfigModel.findOneAndUpdate(
+                { categoryId },
+                {
+                    categoryId,
+                    variations,
+                    isActive: req.body?.isActive !== false
+                },
+                { new: true, upsert: true }
+            )
+
+            responseReturn(res, 200, {
+                config,
+                message: 'variation configuration update success'
+            })
+        } catch (error) {
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
 }
