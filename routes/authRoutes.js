@@ -3,6 +3,7 @@ const { authMiddleware } = require('../middlewares/authMiddleware')
 const { createRateLimit } = require('../middlewares/securityMiddleware')
 const { sellerVerificationUploadMiddleware } = require('../middlewares/sellerVerificationUploadMiddleware')
 const authControllers = require('../controllers/authControllers')
+const otpAuthController = require('../controllers/otpAuthController')
 const sellerVerificationController = require('../controllers/sellerVerificationController')
 
 const passwordChangeRateLimit = createRateLimit({
@@ -12,7 +13,25 @@ const passwordChangeRateLimit = createRateLimit({
     keyGenerator: (req) => `${req.id || req.ip}:${req.originalUrl}`
 })
 
+const otpVerifyRateLimit = createRateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: 'Too many OTP verification attempts. Please login again later.',
+    keyGenerator: (req) => `${req.ip}:${req.body?.challengeToken || 'missing'}:${req.originalUrl}`
+})
+
+const otpRetryRateLimit = createRateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Too many OTP resend attempts. Please login again later.',
+    keyGenerator: (req) => `${req.ip}:${req.body?.challengeToken || 'missing'}:${req.originalUrl}`
+})
+
 router.post('/admin-login', authControllers.admin_login)
+router.post('/auth/login-otp/verify', otpVerifyRateLimit, otpAuthController.verify_login_otp)
+router.post('/auth/login-otp/retry', otpRetryRateLimit, otpAuthController.retry_login_otp)
+router.post('/auth/signup-otp/verify', otpVerifyRateLimit, otpAuthController.verify_signup_otp)
+router.post('/auth/signup-otp/retry', otpRetryRateLimit, otpAuthController.retry_signup_otp)
 router.get('/get-user', authMiddleware, authControllers.getUser)
 router.get('/seller/profile', authMiddleware, authControllers.getUser)
 router.post('/seller-register', authControllers.seller_register)

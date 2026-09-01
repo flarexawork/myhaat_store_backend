@@ -17,6 +17,8 @@ const {
 const sendMail = require('../utiles/mailer')
 const emailVerificationTemplate = require('../utiles/Template/emailVerification')
 const securityAlertTemplate = require('../utiles/Template/securityAlert')
+const msg91OtpService = require('../services/auth/msg91OtpService')
+const { createLoginChallenge, createSignupChallenge } = require('../services/auth/otpChallengeService')
 const {
     escapeRegex,
     getAdminPrivilegeRole,
@@ -94,6 +96,54 @@ const configureCloudinary = () => {
     })
 }
 
+const issueAdminLogin = async (admin, res) => {
+    const token = await createToken({
+        id: admin.id,
+        role: 'admin'
+    })
+
+    res.cookie('accessToken', token, {
+        expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    })
+
+    return {
+        token,
+        message: 'Login success'
+    }
+}
+
+const issueSellerLogin = async (seller, res) => {
+    const token = await createToken({
+        id: seller.id,
+        role: seller.role
+    })
+
+    res.cookie('accessToken', token, {
+        expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+    })
+
+    return {
+        token,
+        message: 'Login success',
+        ...getSellerVerificationFlags(seller)
+    }
+}
+
+const buildOtpRequiredResponse = (challenge, role) => ({
+    success: true,
+    requiresOtp: true,
+    challengeToken: challenge.challengeToken,
+    maskedIdentifier: challenge.maskedIdentifier,
+    expiresInSeconds: challenge.expiresInSeconds,
+    resendCooldownSeconds: challenge.resendCooldownSeconds,
+    role,
+    purpose: 'login',
+    message: 'OTP sent successfully'
+})
+
 
 
 
@@ -108,14 +158,25 @@ class authControllers {
             if (admin) {
                 const match = await bcrpty.compare(password, admin.password)
                 if (match) {
-                    const token = await createToken({
-                        id: admin.id,
-                        role: 'admin'
-                    })
-                    res.cookie('accessToken', token, {
-                        expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-                    })
-                    responseReturn(res, 200, { token, message: 'Login success' })
+                    if (msg91OtpService.isEnabled()) {
+                        if (!admin.mobile) {
+                            return responseReturn(res, 400, {
+                                success: false,
+                                message: 'A mobile number is required for OTP login. Please ask a super admin to update this admin account.'
+                            })
+                        }
+
+                        const challenge = await createLoginChallenge({
+                            accountId: admin._id,
+                            role: 'admin',
+                            identifier: admin.mobile
+                        })
+
+                        return responseReturn(res, 200, buildOtpRequiredResponse(challenge, 'admin'))
+                    }
+
+                    const payload = await issueAdminLogin(admin, res)
+                    responseReturn(res, 200, payload)
                 } else {
                     responseReturn(res, 404, { error: "The password you entered is incorrect." })
                 }
@@ -123,6 +184,13 @@ class authControllers {
                 responseReturn(res, 404, { error: "No account was found with this email address." })
             }
         } catch (error) {
+            if (error.statusCode) {
+                return responseReturn(res, error.statusCode, {
+                    success: false,
+                    message: error.message
+                })
+            }
+
             responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
@@ -154,39 +222,41 @@ class authControllers {
                 return responseReturn(res, 404, { error: "No account was found with that email address or mobile number." })
             }
 
-            if (seller.isEmailVerified === false) {
-                return responseReturn(res, 403, {
-                    success: false,
-                    message: 'Please verify your email address before logging in.'
-                })
-            }
-
             const match = await bcrpty.compare(password, seller.password)
 
             if (!match) {
                 return responseReturn(res, 400, { error: "The password you entered is incorrect." })
             }
 
-            const token = await createToken({
-                id: seller.id,
-                role: seller.role
-            })
+            if (msg91OtpService.isEnabled()) {
+                if (!seller.mobile) {
+                    return responseReturn(res, 400, {
+                        success: false,
+                        message: 'A mobile number is required for OTP login.'
+                    })
+                }
 
-            res.cookie('accessToken', token, {
-                expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict'
-            })
+                const challenge = await createLoginChallenge({
+                    accountId: seller._id,
+                    role: 'seller',
+                    identifier: seller.mobile
+                })
 
-            return responseReturn(res, 200, {
-                token,
-                message: 'Login success',
-                ...getSellerVerificationFlags(seller)
-            })
+                return responseReturn(res, 200, buildOtpRequiredResponse(challenge, 'seller'))
+            }
+
+            const payload = await issueSellerLogin(seller, res)
+            return responseReturn(res, 200, payload)
 
         } catch (error) {
             console.log(error)
+            if (error.statusCode) {
+                return responseReturn(res, error.statusCode, {
+                    success: false,
+                    message: error.message
+                })
+            }
+
             return responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
         }
     }
@@ -221,40 +291,31 @@ class authControllers {
             }
 
 
-            const seller = await sellerModel.create({
+            if (!msg91OtpService.isEnabled()) {
+                return responseReturn(res, 503, {
+                    success: false,
+                    message: 'OTP signup is not available. Please try again later.'
+                })
+            }
+
+            const challenge = await createSignupChallenge({
+                role: 'seller',
                 name,
                 email: normalizedEmail,
                 mobile,
-                password: await bcrpty.hash(password, 10),
-                method: 'manually',
-                shopInfo: {},
-                isEmailVerified: false
+                passwordHash: await bcrpty.hash(password, 10)
             })
-
-            await sellerCustomerModel.create({
-                myId: seller.id
-            })
-
-            const token = await createToken({ id: seller.id, role: seller.role })
-
-            res.cookie('accessToken', token, {
-                expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-                httpOnly: true
-            })
-
-            let emailSent = true
-            try {
-                await sendSellerVerificationEmail(seller)
-            } catch (mailError) {
-                emailSent = false
-                console.log(mailError.message)
-            }
 
             return responseReturn(res, 201, {
-                token,
-                message: emailSent
-                    ? 'Register success. Please verify your email.'
-                    : 'Register success, but the verification email could not be sent.'
+                success: true,
+                requiresOtp: true,
+                challengeToken: challenge.challengeToken,
+                maskedIdentifier: challenge.maskedIdentifier,
+                expiresInSeconds: challenge.expiresInSeconds,
+                resendCooldownSeconds: challenge.resendCooldownSeconds,
+                role: 'seller',
+                purpose: 'signup',
+                message: 'OTP sent successfully'
             })
 
         } catch (error) {
@@ -599,7 +660,7 @@ class authControllers {
     }
 
     create_admin = async (req, res) => {
-        const { name, email, password, role } = req.body
+        const { name, email, password, role, mobile } = req.body
 
         try {
             if (req.role !== 'admin') {
@@ -614,8 +675,13 @@ class authControllers {
             const normalizedEmail = normalizeEmail(email)
             const adminRole = role === 'super_admin' ? 'super_admin' : 'admin'
 
-            if (!username || !normalizedEmail || !password) {
-                return responseReturn(res, 400, { message: 'Username, email address, and password are required.' })
+            const mobileRegex = /^\+[1-9]\d{7,14}$/
+            if (!username || !normalizedEmail || !password || !mobile) {
+                return responseReturn(res, 400, { message: 'Username, email address, mobile number, and password are required.' })
+            }
+
+            if (!mobileRegex.test(mobile)) {
+                return responseReturn(res, 400, { message: 'Please enter a valid mobile number, including the country code, for example +919876543210.' })
             }
 
             if (!isStrongPassword(password)) {
@@ -634,9 +700,15 @@ class authControllers {
                 return responseReturn(res, 409, { message: 'This username is already in use.' })
             }
 
+            const existingAdminByMobile = await adminModel.findOne({ mobile })
+            if (existingAdminByMobile) {
+                return responseReturn(res, 409, { message: 'An account with this mobile number already exists.' })
+            }
+
             const admin = await adminModel.create({
                 name: username,
                 email: normalizedEmail,
+                mobile,
                 password: await bcrpty.hash(password, 10),
                 image: 'admin.png',
                 role: 'admin',
@@ -656,6 +728,7 @@ class authControllers {
                     _id: admin._id,
                     name: admin.name,
                     email: admin.email,
+                    mobile: admin.mobile,
                     adminRole
                 }
             })
@@ -719,4 +792,7 @@ class authControllers {
         }
     }
 }
-module.exports = new authControllers()
+const controller = new authControllers()
+controller.issueAdminLogin = issueAdminLogin
+controller.issueSellerLogin = issueSellerLogin
+module.exports = controller

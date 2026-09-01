@@ -13,6 +13,8 @@ const sendMail = require('../../utiles/mailer')
 const emailVerificationTemplate = require('../../utiles/Template/emailVerification')
 const passwordResetTemplate = require('../../utiles/Template/passwordReset')
 const securityAlertTemplate = require('../../utiles/Template/securityAlert')
+const msg91OtpService = require('../../services/auth/msg91OtpService')
+const { createLoginChallenge, createSignupChallenge } = require('../../services/auth/otpChallengeService')
 const {
     getClientDevice,
     getClientIp,
@@ -169,37 +171,31 @@ class customerAuthController {
             if (customer) {
                 return responseReturn(res, 404, { error: 'An account with this email address already exists.' })
             } else {
-                const createCustomer = await customerModel.create({
-                    name: name.trim(),
-                    email: normalizedEmail,
-                    password: await bcrypt.hash(password, 10),
-                    phone: sanitizedPhone,
-                    method: 'menualy',
-                    isEmailVerified: false
-                })
-                await sellerCustomerModel.create({
-                    myId: createCustomer.id
-                })
-
-                let emailSent = true
-                try {
-                    await sendVerificationEmail(createCustomer)
-                } catch (mailError) {
-                    emailSent = false
-                    console.log(mailError.message)
+                if (!msg91OtpService.isEnabled()) {
+                    return responseReturn(res, 503, {
+                        success: false,
+                        message: 'OTP signup is not available. Please try again later.'
+                    })
                 }
 
-                const { accessToken, refreshToken } = await issueCustomerTokens(createCustomer, res)
+                const challenge = await createSignupChallenge({
+                    role: 'customer',
+                    name: name.trim(),
+                    email: normalizedEmail,
+                    mobile: sanitizedPhone,
+                    passwordHash: await bcrypt.hash(password, 10)
+                })
 
                 return responseReturn(res, 201, {
                     success: true,
-                    message: emailSent
-                        ? 'Register success. Please verify your email.'
-                        : 'Register success, but the verification email could not be sent.',
-                    token: accessToken,
-                    accessToken,
-                    refreshToken,
-                    requiresEmailVerification: true
+                    requiresOtp: true,
+                    challengeToken: challenge.challengeToken,
+                    maskedIdentifier: challenge.maskedIdentifier,
+                    expiresInSeconds: challenge.expiresInSeconds,
+                    resendCooldownSeconds: challenge.resendCooldownSeconds,
+                    role: 'customer',
+                    purpose: 'signup',
+                    message: 'OTP sent successfully'
                 })
             }
         } catch (error) {
@@ -218,15 +214,35 @@ class customerAuthController {
                 .findOne({ email: normalizeEmail(email) })
                 .select('+password')
             if (customer) {
-                if (customer.isEmailVerified === false) {
-                    return responseReturn(res, 403, {
-                        success: false,
-                        message: 'Please verify your email address before logging in.'
-                    })
-                }
-
                 const match = await bcrypt.compare(password, customer.password)
                 if (match) {
+                    if (msg91OtpService.isEnabled()) {
+                        if (!customer.phone) {
+                            return responseReturn(res, 400, {
+                                success: false,
+                                message: 'A mobile number is required for OTP login.'
+                            })
+                        }
+
+                        const challenge = await createLoginChallenge({
+                            accountId: customer._id,
+                            role: 'customer',
+                            identifier: customer.phone
+                        })
+
+                        return responseReturn(res, 200, {
+                            success: true,
+                            requiresOtp: true,
+                            challengeToken: challenge.challengeToken,
+                            maskedIdentifier: challenge.maskedIdentifier,
+                            expiresInSeconds: challenge.expiresInSeconds,
+                            resendCooldownSeconds: challenge.resendCooldownSeconds,
+                            role: 'customer',
+                            purpose: 'login',
+                            message: 'OTP sent successfully'
+                        })
+                    }
+
                     const { accessToken, refreshToken } = await issueCustomerTokens(customer, res)
 
                     return responseReturn(res, 201, {
@@ -244,6 +260,13 @@ class customerAuthController {
             }
         } catch (error) {
             console.log(error.message)
+            if (error.statusCode) {
+                return responseReturn(res, error.statusCode, {
+                    success: false,
+                    message: error.message
+                })
+            }
+
             return responseReturn(res, 500, {
                 success: false,
                 message: 'Something went wrong. Please try again later.'
@@ -468,13 +491,6 @@ class customerAuthController {
                 })
             }
 
-            if (customer.isEmailVerified === false) {
-                return responseReturn(res, 403, {
-                    success: false,
-                        message: 'Please verify your email address before logging in.'
-                })
-            }
-
             const accessToken = await createAccessToken(buildCustomerPayload(customer))
             setCustomerCookies(res, accessToken, providedRefreshToken)
 
@@ -620,4 +636,6 @@ class customerAuthController {
     }
 }
 
-module.exports = new customerAuthController()
+const controller = new customerAuthController()
+controller.issueCustomerTokens = issueCustomerTokens
+module.exports = controller
