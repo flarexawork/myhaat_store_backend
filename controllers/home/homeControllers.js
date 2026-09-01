@@ -101,6 +101,36 @@ class homeControllers {
         }
     }
 
+    get_featured_products = async (req, res) => {
+        try {
+            const page = Math.max(parseInt(req.query.page) || 1, 1)
+            const limit = Math.min(Math.max(parseInt(req.query.limit) || 16, 4), 24)
+            const skip = (page - 1) * limit
+            const activeSellers = await getActiveSellers();
+            const query = {
+                approval_status: 'approved',
+                sellerId: { $in: activeSellers }
+            };
+
+            const [products, totalProduct] = await Promise.all([
+                productModel.find(query).skip(skip).limit(limit).sort({
+                    createdAt: -1
+                }),
+                productModel.countDocuments(query)
+            ])
+
+            responseReturn(res, 200, {
+                products,
+                totalProduct,
+                page,
+                limit,
+                hasMore: skip + products.length < totalProduct
+            })
+        } catch (error) {
+            responseReturn(res, 500, { error: 'Something went wrong. Please try again later.' })
+        }
+    }
+
     get_product = async (req, res) => {
         const {
             slug
