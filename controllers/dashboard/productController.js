@@ -6,6 +6,7 @@ const sellerModel = require('../../models/sellerModel')
 const { responseReturn } = require('../../utiles/response');
 const authOrderModel = require('../../models/authOrder');
 const { getActiveSellers } = require('../../utiles/activeSellerFilter');
+const { mongo: { ObjectId } } = require('mongoose')
 const {
     normalizePincodes,
     normalizeProductVariations,
@@ -15,6 +16,46 @@ const {
 } = require('../../utiles/productOptions');
 
 const getFormValue = (value) => Array.isArray(value) ? value[0] : value
+
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const resolveCategoryInput = async ({ categoryId, category }) => {
+    const normalizedCategoryId = String(categoryId || '').trim()
+    const normalizedCategory = String(category || '').trim()
+
+    if (normalizedCategoryId) {
+        if (!ObjectId.isValid(normalizedCategoryId)) {
+            return null
+        }
+
+        const categoryDoc = await categoryModel.findById(normalizedCategoryId)
+        if (!categoryDoc) {
+            return null
+        }
+
+        return {
+            category: categoryDoc.name,
+            categoryId: categoryDoc._id
+        }
+    }
+
+    if (!normalizedCategory) {
+        return null
+    }
+
+    const categoryDoc = await categoryModel.findOne({
+        name: { $regex: new RegExp(`^${escapeRegex(normalizedCategory)}$`, 'i') }
+    })
+
+    if (!categoryDoc) {
+        return null
+    }
+
+    return {
+        category: categoryDoc.name,
+        categoryId: categoryDoc._id
+    }
+}
 
 class productController {
 
@@ -62,13 +103,9 @@ class productController {
             })
 
             try {
-                let resolvedCategoryId = categoryId || null
-                if (resolvedCategoryId) {
-                    const categoryDoc = await categoryModel.findById(resolvedCategoryId)
-                    if (!categoryDoc) {
-                        return responseReturn(res, 400, { error: 'A valid category is required.' })
-                    }
-                    category = categoryDoc.name
+                const resolvedCategory = await resolveCategoryInput({ categoryId, category })
+                if (!resolvedCategory) {
+                    return responseReturn(res, 400, { error: 'A valid category is required.' })
                 }
 
                 const productVariations = normalizeProductVariations(parseJsonField(variations, []))
@@ -95,8 +132,8 @@ class productController {
                     name,
                     slug,
                     shopName,
-                    categoryId: resolvedCategoryId,
-                    category: category.trim(),
+                    categoryId: resolvedCategory.categoryId,
+                    category: resolvedCategory.category,
                     description: description.trim(),
                     stock: parseInt(stock),
                     price: parseInt(price),
@@ -211,15 +248,13 @@ class productController {
                 return responseReturn(res, 400, { error: 'This approved product cannot be edited by the seller.' })
             }
 
-            let resolvedCategory = category || product.category
-            let resolvedCategoryId = categoryId || product.categoryId || null
-            if (categoryId) {
-                const categoryDoc = await categoryModel.findById(categoryId)
-                if (!categoryDoc) {
-                    return responseReturn(res, 400, { error: 'A valid category is required.' })
-                }
-                resolvedCategory = categoryDoc.name
-                resolvedCategoryId = categoryDoc._id
+            const requestedCategory = await resolveCategoryInput({
+                categoryId: categoryId || product.categoryId,
+                category: category || product.category
+            })
+
+            if (!requestedCategory) {
+                return responseReturn(res, 400, { error: 'A valid category is required.' })
             }
 
             const productVariations = normalizeProductVariations(variations || [])
@@ -243,8 +278,8 @@ class productController {
                 productId,
                 stock,
                 slug,
-                category: resolvedCategory,
-                categoryId: resolvedCategoryId,
+                category: requestedCategory.category,
+                categoryId: requestedCategory.categoryId,
                 variations: productVariations,
                 variantCombinations: productVariants,
                 deliveryPincodes: pincodes
